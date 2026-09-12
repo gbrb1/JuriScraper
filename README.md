@@ -94,18 +94,85 @@ As migrations do Entity Framework Core são aplicadas automaticamente durante a 
 
 Portanto, **não é necessário instalar o PostgreSQL ou executar comandos de migration manualmente**.
 
-### 🔌 Principais Endpoints da API
+### 🔌 API e Principais Endpoints
 
-#### Listar processos
 
-```http
-GET /processos
+A API está disponível em:
+
+```text
+http://localhost:5189
 ```
 
-#### Consultar processo
+A documentação interativa da API pode ser acessada em:
+
+```text
+http://localhost:5189/swagger
+```
+
+#### Listar todos os processos
 
 ```http
-GET /processos/{numeroProcesso}
+GET /api/Processos
+```
+
+Retorna todos os processos armazenados no banco de dados.
+
+#### Consultar processo por número
+
+```http
+GET /api/Processos/{numeroProcesso}
+```
+
+Consulta um processo pelo número informado.
+
+Caso o processo já esteja armazenado, os dados são retornados diretamente do banco. Caso contrário, uma nova consulta é realizada no tribunal.
+
+Exemplo:
+
+```http
+GET /api/Processos/1501983-25.2022.8.26.0022
+```
+
+#### Salvar processo
+
+```http
+POST /api/Processos/salvar
+```
+
+Recebe os dados de um processo e realiza sua persistência no banco de dados.
+
+#### Consultar processos em lote
+
+```http
+POST /api/Processos/consultar-lote
+```
+
+Recebe uma lista de números de processos e realiza a coleta sequencialmente.
+
+Exemplo de corpo da requisição:
+
+```json
+[
+  "0000234-11.2026.5.12.0034",
+  "0020169-74.2026.5.04.0029",
+  "1501983-25.2022.8.26.0022"
+]
+```
+
+Os processos que apresentarem erro são registrados individualmente, permitindo que o processamento continue com os demais processos do lote.
+
+#### Excluir processo
+
+```http
+DELETE /api/Processos/{tribunal}/{numeroProcesso}
+```
+
+Remove o processo e suas partes relacionadas do banco de dados.
+
+Exemplo:
+
+```http
+DELETE /api/Processos/TJ-SP/1501983-25.2022.8.26.0022
 ```
 
 ### 🛑 Encerrar a aplicação
