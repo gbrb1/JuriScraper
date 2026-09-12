@@ -14,27 +14,29 @@ O sistema permite consultas individuais e em lote, armazenamento local dos proce
 
 * Docker Desktop instalado e em execução
 
-### 1. Extrair o projeto
+### 1. Clonar o projeto
 
-Extraia o arquivo `.zip` em uma pasta de sua preferência.
+Clone o repositório:
 
-### 2. Abrir o terminal
-
-Abra um terminal dentro da pasta raiz do projeto, onde está localizado o arquivo:
-
-```text
-docker-compose.yml
+```bash
+git clone https://github.com/gbrb1/JuriScraper.git
 ```
 
-### 3. Iniciar a aplicação
+Entre na pasta do projeto:
 
-Execute:
+```bash
+cd JuriScraper
+```
+
+### 2. Iniciar a aplicação pela primeira vez
+
+Na primeira execução, utilize:
 
 ```bash
 docker compose up --build
 ```
 
-Na primeira execução, o Docker irá:
+O Docker irá:
 
 * baixar as imagens necessárias
 * criar o container do PostgreSQL
@@ -48,9 +50,25 @@ Na primeira execução, o Docker irá:
 
 A primeira execução pode levar alguns minutos devido ao download das imagens e dependências.
 
+### 3. Execuções seguintes
+
+Após a primeira execução, caso não tenha ocorrido nenhuma alteração que exija uma nova build, basta executar:
+
+```bash
+docker compose up -d
+```
+
+Caso tenha alterado o código e queira reconstruir as imagens:
+
+```bash
+docker compose up --build -d
+```
+
+O parâmetro `-d` executa os containers em segundo plano, liberando o terminal.
+
 ### 🌐 Endereços de Acesso
 
-**Aplicação Web:**
+A **porta de entrada da aplicação** é:
 
 ```text
 http://localhost:3000
@@ -74,9 +92,9 @@ O PostgreSQL é executado automaticamente em um container separado.
 
 As migrations do Entity Framework Core são aplicadas automaticamente durante a inicialização da API.
 
-Portanto, **não é necessário executar comandos de migration manualmente**.
+Portanto, **não é necessário instalar o PostgreSQL ou executar comandos de migration manualmente**.
 
-### 🔌 Endpoints da API
+### 🔌 Principais Endpoints da API
 
 #### Listar processos
 
@@ -90,32 +108,18 @@ GET /processos
 GET /processos/{numeroProcesso}
 ```
 
-### 🔄 Reconstruir os containers
-
-Após alterações no código, utilize:
-
-```bash
-docker compose up --build
-```
-
-Caso nenhuma alteração exija uma nova build, basta iniciar os containers:
-
-```bash
-docker compose up
-```
-
 ### 🛑 Encerrar a aplicação
 
-Para interromper a aplicação diretamente no terminal:
-
-```text
-Ctrl + C
-```
-
-Ou execute:
+Se os containers estiverem sendo executados em segundo plano, utilize:
 
 ```bash
 docker compose down
+```
+
+Para iniciar novamente:
+
+```bash
+docker compose up -d
 ```
 
 ---
@@ -124,7 +128,7 @@ docker compose down
 
 ## 1. Consulta Individual
 
-Acesse a aplicação:
+Acesse a **porta de entrada da aplicação**:
 
 ```text
 http://localhost:3000
@@ -187,7 +191,7 @@ Quando isso ocorrer:
 1. Um alerta será exibido na aplicação
 2. A imagem do CAPTCHA será apresentada em um modal
 3. Digite os caracteres exibidos
-4. Clique em **Enviar Resolução**
+4. Clique em **Confirmar**
 
 Caso a imagem esteja ilegível ou seja necessário interromper a consulta:
 
@@ -262,8 +266,6 @@ O tribunal é identificado automaticamente a partir do número CNJ informado.
 
 ```text
 .NET
-Entity Framework Core
-PostgreSQL
 Playwright
 ```
 
@@ -279,8 +281,8 @@ JavaScript
 
 ```text
 Docker
-Docker Compose
-Nginx
+Entity Framework Core
+PostgreSQL
 ```
 
 ---
