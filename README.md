@@ -221,7 +221,7 @@ O sistema irá:
 Para ignorar os dados armazenados e realizar uma nova consulta diretamente no tribunal, utilize o botão:
 
 ```text
-Buscar novas informações no tribunal
+🔄Buscar novas informações no tribunal
 ```
 
 ---
