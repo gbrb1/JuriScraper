@@ -669,198 +669,6 @@ export default function App() {
             </a>
           </div>
         </header>
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: 16,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#64748b",
-              textTransform: "uppercase",
-              letterSpacing: 1.2,
-            }}
-          >
-            Tribunais Suportados
-          </span>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            <a
-              href="https://esaj.tjsp.jus.br/cpopg/open.do"
-              target="_blank"
-              rel="noreferrer"
-              title="Tribunal de Justiça do Estado de São Paulo"
-              style={{
-                background: "rgba(168, 85, 247, 0.15)",
-                border: "1px solid rgba(168, 85, 247, 0.3)",
-                color: "#d8b4fe",
-                padding: "4px 10px",
-                borderRadius: 20,
-                fontSize: 11,
-                fontWeight: 600,
-                textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.25)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.15)";
-              }}
-            >
-              TJSP (e-SAJ)
-            </a>
-
-            <a
-              href="https://pje.trt2.jus.br/consultaprocessual/"
-              target="_blank"
-              rel="noreferrer"
-              title="Tribunal Regional do Trabalho da 2ª Região (São Paulo e Região Metropolitana)"
-              style={{
-                background: "rgba(168, 85, 247, 0.15)",
-                border: "1px solid rgba(168, 85, 247, 0.3)",
-                color: "#d8b4fe",
-                padding: "4px 10px",
-                borderRadius: 20,
-                fontSize: 11,
-                fontWeight: 600,
-                textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.25)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.15)";
-              }}
-            >
-              TRT-2 (SP)
-            </a>
-
-            <a
-              href="https://pje.trt4.jus.br/consultaprocessual/"
-              target="_blank"
-              rel="noreferrer"
-              title="Tribunal Regional do Trabalho da 4ª Região (Rio Grande do Sul)"
-              style={{
-                background: "rgba(168, 85, 247, 0.15)",
-                border: "1px solid rgba(168, 85, 247, 0.3)",
-                color: "#d8b4fe",
-                padding: "4px 10px",
-                borderRadius: 20,
-                fontSize: 11,
-                fontWeight: 600,
-                textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.25)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.15)";
-              }}
-            >
-              TRT-4 (RS)
-            </a>
-
-            <a
-              href="https://pje.trt12.jus.br/consultaprocessual/"
-              target="_blank"
-              rel="noreferrer"
-              title="Tribunal Regional do Trabalho da 12ª Região (Santa Catarina)"
-              style={{
-                background: "rgba(168, 85, 247, 0.15)",
-                border: "1px solid rgba(168, 85, 247, 0.3)",
-                color: "#d8b4fe",
-                padding: "4px 10px",
-                borderRadius: 20,
-                fontSize: 11,
-                fontWeight: 600,
-                textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.25)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.15)";
-              }}
-            >
-              TRT-12 (SC)
-            </a>
-
-            <a
-              href="https://pje.trt15.jus.br/consultaprocessual/"
-              target="_blank"
-              rel="noreferrer"
-              title="Tribunal Regional do Trabalho da 15ª Região (Campinas e Interior de SP)"
-              style={{
-                background: "rgba(168, 85, 247, 0.15)",
-                border: "1px solid rgba(168, 85, 247, 0.3)",
-                color: "#d8b4fe",
-                padding: "4px 10px",
-                borderRadius: 20,
-                fontSize: 11,
-                fontWeight: 600,
-                textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.25)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.15)";
-              }}
-            >
-              TRT-15 (Campinas)
-            </a>
-          </div>
-        </div>
 
         <div
           style={{
@@ -1753,16 +1561,6 @@ export default function App() {
                 marginBottom: 20,
               }}
             >
-              {/* <div>
-                <span
-                  style={{ fontSize: 12, color: "#94a3b8", display: "block" }}
-                >
-                  Número do Processo
-                </span>
-                <strong style={{ fontSize: 14, fontFamily: "monospace" }}>
-                  {resultadoAtual.numeroProcesso}
-                </strong>
-              </div> */}
               <div>
                 <span
                   style={{ fontSize: 12, color: "#94a3b8", display: "block" }}
@@ -2063,6 +1861,201 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Footer com Tribunais Suportados */}
+        <footer
+          style={{
+            borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+            paddingTop: 24,
+            marginTop: 32,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#64748b",
+              textTransform: "uppercase",
+              letterSpacing: 1.2,
+            }}
+          >
+            Tribunais Suportados
+          </span>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <a
+              href="https://esaj.tjsp.jus.br/cpopg/open.do"
+              target="_blank"
+              rel="noreferrer"
+              title="Tribunal de Justiça do Estado de São Paulo"
+              style={{
+                background: "rgba(168, 85, 247, 0.15)",
+                border: "1px solid rgba(168, 85, 247, 0.3)",
+                color: "#d8b4fe",
+                padding: "4px 10px",
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
+                e.currentTarget.style.background = "rgba(168, 85, 247, 0.25)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
+                e.currentTarget.style.background = "rgba(168, 85, 247, 0.15)";
+              }}
+            >
+              TJSP (e-SAJ)
+            </a>
+
+            <a
+              href="https://pje.trt2.jus.br/consultaprocessual/"
+              target="_blank"
+              rel="noreferrer"
+              title="Tribunal Regional do Trabalho da 2ª Região (São Paulo e Região Metropolitana)"
+              style={{
+                background: "rgba(168, 85, 247, 0.15)",
+                border: "1px solid rgba(168, 85, 247, 0.3)",
+                color: "#d8b4fe",
+                padding: "4px 10px",
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
+                e.currentTarget.style.background = "rgba(168, 85, 247, 0.25)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
+                e.currentTarget.style.background = "rgba(168, 85, 247, 0.15)";
+              }}
+            >
+              TRT-2 (SP)
+            </a>
+
+            <a
+              href="https://pje.trt4.jus.br/consultaprocessual/"
+              target="_blank"
+              rel="noreferrer"
+              title="Tribunal Regional do Trabalho da 4ª Região (Rio Grande do Sul)"
+              style={{
+                background: "rgba(168, 85, 247, 0.15)",
+                border: "1px solid rgba(168, 85, 247, 0.3)",
+                color: "#d8b4fe",
+                padding: "4px 10px",
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
+                e.currentTarget.style.background = "rgba(168, 85, 247, 0.25)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
+                e.currentTarget.style.background = "rgba(168, 85, 247, 0.15)";
+              }}
+            >
+              TRT-4 (RS)
+            </a>
+
+            <a
+              href="https://pje.trt12.jus.br/consultaprocessual/"
+              target="_blank"
+              rel="noreferrer"
+              title="Tribunal Regional do Trabalho da 12ª Região (Santa Catarina)"
+              style={{
+                background: "rgba(168, 85, 247, 0.15)",
+                border: "1px solid rgba(168, 85, 247, 0.3)",
+                color: "#d8b4fe",
+                padding: "4px 10px",
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
+                e.currentTarget.style.background = "rgba(168, 85, 247, 0.25)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
+                e.currentTarget.style.background = "rgba(168, 85, 247, 0.15)";
+              }}
+            >
+              TRT-12 (SC)
+            </a>
+
+            <a
+              href="https://pje.trt15.jus.br/consultaprocessual/"
+              target="_blank"
+              rel="noreferrer"
+              title="Tribunal Regional do Trabalho da 15ª Região (Campinas e Interior de SP)"
+              style={{
+                background: "rgba(168, 85, 247, 0.15)",
+                border: "1px solid rgba(168, 85, 247, 0.3)",
+                color: "#d8b4fe",
+                padding: "4px 10px",
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
+                e.currentTarget.style.background = "rgba(168, 85, 247, 0.25)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
+                e.currentTarget.style.background = "rgba(168, 85, 247, 0.15)";
+              }}
+            >
+              TRT-15 (Campinas)
+            </a>
+          </div>
+        </footer>
       </div>
     </div>
   );

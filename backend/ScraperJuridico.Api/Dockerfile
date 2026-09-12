@@ -9,14 +9,26 @@ COPY ["ScraperJuridico.Infrastructure/ScraperJuridico.Infrastructure.csproj", "S
 RUN dotnet restore "ScraperJuridico.Api/ScraperJuridico.Api.csproj"
 
 COPY . .
+
 WORKDIR "/src/ScraperJuridico.Api"
 
+# instala o cli do playwright
+RUN dotnet tool install --global Microsoft.Playwright.CLI
+ENV PATH="$PATH:/root/.dotnet/tools"
+
+# compila o projeto para o cli encontrar o playwright
+RUN dotnet build -c Release
+
+# baixa o chromium durante o build da imagem
+RUN playwright install chromium
+
 RUN dotnet publish -c Release -o /app/publish
+
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# instala as dependências de sistema necessárias para o Chromium rodar no Linux
+# dependências necessárias para o chromium
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 \
     libnspr4 \
@@ -36,19 +48,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     libu2f-udev \
     libvulkan1 \
-    curl \
+    libxkbcommon0 \
     && rm -rf /var/lib/apt/lists/*
 
-# instala o chromium do playwright
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get update \
-    && apt-get install -y nodejs \
-    && npx playwright install chromium \
-    && rm -rf /var/lib/apt/lists/*
+# leva o chromium instalado no estágio de build para a imagem final
+COPY --from=build /root/.cache/ms-playwright /root/.cache/ms-playwright
 
 COPY --from=build /app/publish .
 
 ENV ASPNETCORE_URLS=http://+:8080
+
 EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "ScraperJuridico.Api.dll"]
