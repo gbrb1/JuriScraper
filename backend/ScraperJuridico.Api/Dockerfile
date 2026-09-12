@@ -16,7 +16,7 @@ RUN dotnet publish -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# Instala as dependências de sistema necessárias para o Chromium rodar no Linux
+# instala as dependências de sistema necessárias para o Chromium rodar no Linux
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 \
     libnspr4 \
@@ -36,6 +36,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     libu2f-udev \
     libvulkan1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# instala o chromium do playwright
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get update \
+    && apt-get install -y nodejs \
+    && npx playwright install chromium \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/publish .

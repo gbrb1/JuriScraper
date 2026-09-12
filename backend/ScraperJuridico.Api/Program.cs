@@ -51,23 +51,6 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 
-// GARANTIA DO PLAYWRIGHT
-try
-{
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    logger.LogInformation("[Playwright] Verificando se os binários do Chromium estão instalados...");
-
-    // instala o chromium caso ainda não esteja disponível
-    Microsoft.Playwright.Program.Main(new[] { "install", "chromium" });
-
-    logger.LogInformation("[Playwright] Binários do Chromium prontos para uso.");
-}
-catch (Exception ex)
-{
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    logger.LogError(ex, "[Playwright] Erro ao tentar instalar o Chromium automaticamente.");
-}
-
 // Configuração do Swagger
 // fica disponível também no ambiente Docker
 app.UseSwagger();
