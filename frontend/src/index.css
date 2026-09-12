@@ -1,0 +1,49 @@
+:root {
+  --text: #e2e8f0;
+  --text-h: #f8fafc;
+  --bg: #0b0f19;
+  --border: rgba(255, 255, 255, 0.08);
+  --accent: #3b82f6;
+
+  --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  font-family: var(--sans);
+  color-scheme: dark;
+  color: var(--text);
+  text-align: center;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  /* Degradê escuro contínuo */
+  background: linear-gradient(145deg, #0b0f19 0%, #111827 50%, #030712 100%);
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  text-align: left; /* Garante alinhamento natural para tabelas e cards */
+}
+
+/* Reset básico para evitar surpresas com inputs e botões */
+* {
+  box-sizing: border-box;
+}
+
+input,
+textarea,
+button {
+  font-family: inherit;
+}

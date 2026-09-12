@@ -1,0 +1,93 @@
+# sistema operacional
+
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# visual studio / rider
+
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# .net
+
+**/bin/
+**/obj/
+**/TestResults/
+*.dll
+*.pdb
+
+# arquivos de configuração locais
+
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/appsettings.*.Local.json
+
+# secrets
+
+secrets.json
+**/secrets.json
+
+# node / react / vite
+
+**/node_modules/
+**/dist/
+**/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# cobertura de testes
+
+coverage/
+**/coverage/
+
+# arquivos temporários
+
+*.tmp
+*.temp
+*.log
+
+# docker
+
+docker-compose.override.yml
+
+# arquivos de ambiente
+
+.env
+.env.*
+!.env.example
+
+# certificados locais
+
+*.pfx
+*.pem
+*.key
+
+# arquivos de publicação
+
+**/publish/
+**/out/
+
+# cache
+
+**/.cache/
+**/.eslintcache
+**/.stylelintcache
+
+# playwright
+
+**/playwright-report/
+**/test-results/
+**/blob-report/
+
+# arquivos de banco locais
+
+*.db
+*.sqlite
+*.sqlite3

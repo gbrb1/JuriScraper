@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="ScraperJuridico.Api/ScraperJuridico.Api.csproj" />
+  <Project Path="ScraperJuridico.Application/ScraperJuridico.Application.csproj" />
+  <Project Path="ScraperJuridico.Domain/ScraperJuridico.Domain.csproj" />
+  <Project Path="ScraperJuridico.Infrastructure/ScraperJuridico.Infrastructure.csproj" />
+</Solution>
