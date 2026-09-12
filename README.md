@@ -109,7 +109,7 @@ A documentação interativa da API pode ser acessada em:
 http://localhost:5189/swagger
 ```
 
-#### Listar todos os processos
+- ### Listar todos os processos
 
 ```http
 GET /api/Processos
@@ -117,7 +117,7 @@ GET /api/Processos
 
 Retorna todos os processos armazenados no banco de dados.
 
-#### Consultar processo por número
+- ### Consultar processo por número
 
 ```http
 GET /api/Processos/{numeroProcesso}
@@ -133,7 +133,7 @@ Exemplo:
 GET /api/Processos/1501983-25.2022.8.26.0022
 ```
 
-#### Salvar processo
+- ### Salvar processo
 
 ```http
 POST /api/Processos/salvar
@@ -141,7 +141,7 @@ POST /api/Processos/salvar
 
 Recebe os dados de um processo e realiza sua persistência no banco de dados.
 
-#### Consultar processos em lote
+- ### Consultar processos em lote
 
 ```http
 POST /api/Processos/consultar-lote
@@ -161,7 +161,7 @@ Exemplo de corpo da requisição:
 
 Os processos que apresentarem erro são registrados individualmente, permitindo que o processamento continue com os demais processos do lote.
 
-#### Excluir processo
+- ### Excluir processo
 
 ```http
 DELETE /api/Processos/{tribunal}/{numeroProcesso}
