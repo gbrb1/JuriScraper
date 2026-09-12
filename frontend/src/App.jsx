@@ -41,7 +41,7 @@ export default function App() {
   const [processosSalvos, setProcessosSalvos] = useState([]);
   const [carregandoLista, setCarregandoLista] = useState(false);
 
-  // Animação de Pontinhos (333ms)
+  // animação de Pontinhos (333ms)
   const [pontosLoading, setPontosLoading] = useState("");
 
   const inputCaptchaRef = useRef(null);
@@ -49,7 +49,7 @@ export default function App() {
   const canceladoManualmenteRef = useRef(false);
 
   const emProcessamento = carregandoIndividual || executandoLote;
-  // Bloqueio das abas: ativo durante scraping, espera de captcha ou escolha de grau
+  // bloqueio das abas: ativo durante scraping, espera de captcha ou escolha de grau
   const abasBloqueadas =
     emProcessamento || !!captchaImg || opcoesGrau.length > 0;
   const sessionIdAtual = processoAtualEmExecucao.replace(/\D/g, "");
@@ -58,7 +58,7 @@ export default function App() {
     carregarProcessosDoBanco();
   }, []);
 
-  // Efeito dos 3 pontinhos ciclando a cada 333ms
+  // efeito dos 3 pontinhos ciclando a cada 333ms
   useEffect(() => {
     if (!emProcessamento) {
       setPontosLoading("");
@@ -81,7 +81,7 @@ export default function App() {
         setProcessosSalvos(Array.isArray(data) ? data : []);
       }
     } catch {
-      // Backend pode estar iniciando
+      // backend pode estar iniciando
     } finally {
       setCarregandoLista(false);
     }
@@ -129,7 +129,7 @@ export default function App() {
     if (!confirmou) return;
 
     try {
-      // 1. Apaga do banco para garantir que o backend não devolva em cache
+      // apaga do banco para garantir que o backend não devolva em cache
       await fetch(
         `${API_BASE}/api/Processos/${encodeURIComponent(
           tribunal
@@ -140,10 +140,10 @@ export default function App() {
       );
       await carregarProcessosDoBanco();
     } catch {
-      // Continua para extrair mesmo se houver falha prévia de delete
+      // continua para extrair mesmo se houver falha prévia de delete
     }
 
-    // 2. Prepara a UI da aba individual para iniciar a raspagem ao vivo
+    // prepara a UI da aba individual para iniciar o scraping
     setModoAba("individual");
     setNumeroInput(numeroProcesso);
     setResultadoAtual(null);
@@ -154,7 +154,7 @@ export default function App() {
 
     window.scrollTo({ top: 0, behavior: "smooth" });
 
-    // 3. Executa a raspagem
+    // scrapando...
     const resultado = await executarExtracaoProcesso(
       numeroProcesso,
       abortControllerRef.current.signal
@@ -163,7 +163,7 @@ export default function App() {
     if (resultado.sucesso) {
       setResultadoAtual(resultado.dados);
 
-      // Salva automaticamente o processo recém-extraído no banco
+      // salva automaticamente o processo recém-extraído no banco
       try {
         const resSalvar = await fetch(`${API_BASE}/api/Processos/salvar`, {
           method: "POST",
@@ -175,7 +175,7 @@ export default function App() {
           await carregarProcessosDoBanco();
         }
       } catch {
-        // Silencia erro caso haja falha temporária de conexão
+        // silencia erro caso haja falha temporária de conexão
       }
     } else if (!canceladoManualmenteRef.current) {
       setErro(resultado.erro);
@@ -185,7 +185,7 @@ export default function App() {
     abortControllerRef.current = null;
   };
 
-  // Polling unificado para Grau e CAPTCHA
+  // polling unificado para Grau e CAPTCHA
   useEffect(() => {
     let intervalId = null;
 
@@ -223,9 +223,7 @@ export default function App() {
               setTimeout(() => inputCaptchaRef.current?.focus(), 100);
             }
           }
-        } catch {
-          // Silencia falhas temporárias
-        }
+        } catch {}
       }, 1000);
     }
 
@@ -258,9 +256,7 @@ export default function App() {
             method: "POST",
           }
         );
-      } catch {
-        // Ignora falhas de rede ao tentar limpar
-      }
+      } catch {}
     }
 
     setCarregandoIndividual(false);
@@ -343,7 +339,7 @@ export default function App() {
     const numeroLimpo = numeroInput.trim();
     if (!numeroLimpo) return;
 
-    // Verifica se já está salvo no banco local
+    // verifica se já está salvo no banco local
     const processoJaSalvo = processosSalvos.find(
       (p) =>
         p.numeroProcesso.replace(/\D/g, "") === numeroLimpo.replace(/\D/g, "")
