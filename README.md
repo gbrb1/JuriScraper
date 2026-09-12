@@ -10,7 +10,7 @@ O sistema permite consultas individuais e em lote, armazenamento local dos proce
 
 # 📖 Guia de Uso
 
-## 1. Execução com Docker
+## 1. Execução com Docker 🐳
 
 ### 1.1 Pré-requisito
 
