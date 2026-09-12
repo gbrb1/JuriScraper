@@ -42,6 +42,8 @@ Na primeira execução, o Docker irá:
 * aplicar automaticamente as migrations
 * construir a API
 * construir o frontend
+* instalar as dependências necessárias para o Chromium
+* baixar o Chromium utilizado pelo Playwright
 * iniciar todos os serviços
 
 A primeira execução pode levar alguns minutos devido ao download das imagens e dependências.
@@ -73,6 +75,20 @@ O PostgreSQL é executado automaticamente em um container separado.
 As migrations do Entity Framework Core são aplicadas automaticamente durante a inicialização da API.
 
 Portanto, **não é necessário executar comandos de migration manualmente**.
+
+### 🔌 Endpoints da API
+
+#### Listar processos
+
+```http
+GET /processos
+```
+
+#### Consultar processo
+
+```http
+GET /processos/{numeroProcesso}
+```
 
 ### 🔄 Reconstruir os containers
 
@@ -122,7 +138,7 @@ Exemplo:
 1501983-25.2022.8.26.0022
 ```
 
-Clique em **Consultar*.
+Clique em **Consultar**.
 
 O sistema irá:
 
@@ -180,7 +196,8 @@ Caso a imagem esteja ilegível ou seja necessário interromper a consulta:
 ```
 
 A resolução é realizada mediante interação do usuário. O sistema não utiliza mecanismos automatizados para contornar o CAPTCHA.
-O Sistema verifica se houve mudança na imagem do CAPTCHA, e caso mude, a nova imagem será mostrada ao usuário.
+
+O sistema verifica se houve mudança na imagem do CAPTCHA e, caso mude, a nova imagem será mostrada ao usuário.
 
 ---
 
@@ -238,7 +255,6 @@ Tribunais Regionais do Trabalho (PJe-TRT)
 O tribunal é identificado automaticamente a partir do número CNJ informado.
 
 ---
-
 
 # 🧱 Tecnologias
 
