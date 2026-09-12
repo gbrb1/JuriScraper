@@ -49,10 +49,10 @@ public class PjeTrtScraper : IScraperService
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
-            Headless = false
+            Headless = true
         });
 
-        // Fecha o navegador se o usuário cancelar no front
+        // fecha o navegador se o usuário cancelar no front
         using var registration = cancellationToken.Register(async () =>
         {
             try
@@ -78,7 +78,7 @@ public class PjeTrtScraper : IScraperService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // 1. Verificação prévia de tribunal indisponível
+        // verificação de tribunal indisponível
         var telaIndisponivel = page.Locator("text=Sistema temporariamente indisponível").First;
         try
         {
@@ -95,7 +95,7 @@ public class PjeTrtScraper : IScraperService
         {
         }
 
-        // 2. Verificação imediata se o processo já abriu com erro (#painel-erro)
+        // verificação imediata se o processo já abriu com erro (#painel-erro)
         var painelErroInicial = page.Locator("#painel-erro").First;
         try
         {
@@ -122,7 +122,7 @@ public class PjeTrtScraper : IScraperService
 
         try
         {
-            // Tela de escolha de instância (1/2 grau)
+            // tela de escolha de instância (1/2 grau)
             var painelEscolha = page.Locator("#painel-escolha-processo").First;
             try
             {
@@ -180,7 +180,7 @@ public class PjeTrtScraper : IScraperService
                 await Task.Delay(1500, cancellationToken);
             }
 
-            // Detecção e resolução de CAPTCHA
+            // detecção e resolução de CAPTCHA
             var imgCaptcha = page.Locator("#imagemCaptcha").First;
             const int maxTentativas = 5;
             int tentativaAtual = 0;
@@ -323,11 +323,11 @@ public class PjeTrtScraper : IScraperService
             _sessionManager.FinalizarSessao(apenasDigitos);
         }
 
-        // Aguarda renderização do processo ou surgimento do erro pós-consulta/captcha
+        // aguarda renderização do processo ou surgimento do erro pós-consulta/captcha
         await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
         await Task.Delay(2500, cancellationToken);
 
-        // 3. Verificação do painel de erro (#painel-erro) caso o tribunal falhe ao localizar o processo
+        // verificação do painel de erro (#painel-erro) caso o tribunal falhe ao localizar o processo
         var painelErro = page.Locator("#painel-erro").First;
         if (await painelErro.IsVisibleAsync())
         {
@@ -426,7 +426,7 @@ public class PjeTrtScraper : IScraperService
             processo.Assunto = "Direito do Trabalho / Rescisão do Contrato";
         }
 
-        // Extração da última movimentação, alternando para visualização em tabela e iterando 'tr.timeline-row'
+        // extração da última movimentação, alternando para visualização em tabela e iterando 'tr.timeline-row'
         try
         {
             var btnTabela = page.Locator("button[aria-label='Visualizar em Tabela'], button[accesskey='n']").First;

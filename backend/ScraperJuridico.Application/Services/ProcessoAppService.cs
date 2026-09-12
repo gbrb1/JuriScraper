@@ -47,7 +47,7 @@ public class ProcessoAppService : IProcessoAppService
         {
             var scraper = _scraperFactory.ObterScraper(numeroLimpo);
 
-            // Repassando o CancellationToken para o scraper (Playwright)
+            // repassando o CancellationToken para o scraper
             var processoColetado = await scraper.ExtrairProcessoAsync(numeroLimpo, cancellationToken);
 
             if (processoColetado is null)
@@ -59,7 +59,6 @@ public class ProcessoAppService : IProcessoAppService
                 );
             }
 
-            // Removido o salvamento automático para garantir que a persistência ocorra apenas sob demanda
 
             return new ResultadoColetaDto(
                 NumeroProcesso: numeroLimpo,
@@ -70,7 +69,7 @@ public class ProcessoAppService : IProcessoAppService
         }
         catch (OperationCanceledException)
         {
-            // Tratamento específico para quando o usuário cancela a execução
+            //tratamento específico para quando o usuário cancela a execução
             return new ResultadoColetaDto(
                 NumeroProcesso: numeroLimpo,
                 Sucesso: false,
@@ -120,7 +119,7 @@ public class ProcessoAppService : IProcessoAppService
 
         foreach (var numero in numerosProcessos)
         {
-            // Interrompe imediatamente o loop do lote se o usuário cancelar
+            //interrompe loop do lote se o usuário cancelar
             cancellationToken.ThrowIfCancellationRequested();
 
             var resultado = await ColetarApenasAsync(numero, cancellationToken);

@@ -18,31 +18,22 @@ public class ProcessosController : ControllerBase
     }
 
     /// <summary>
-    /// Lista todos os processos coletados e persistidos no banco SQL.
-    /// Atende ao requisito do teste: GET /processos
+    /// Lista todos os processos coletados.
     /// </summary>
-    /// <response code="200">Retorna a lista de processos cadastrados no banco.</response>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<ProcessoDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListarTodos()
     {
-        _logger.LogInformation("[API] Solicitada listagem de todos os processos persistidos.");
+        _logger.LogInformation("[API] Solicitada listagem de todos os processos.");
         var processos = await _appService.ListarTodosAsync();
         return Ok(processos);
     }
 
     /// <summary>
-    /// Consulta um processo específico pelo número CNJ.
-    /// Se já existir no banco, retorna os dados persistidos; caso contrário, executa a coleta apenas em memória.
-    /// Atende ao requisito do teste: GET /processos/{numeroProcesso}
+    /// Consulta um processo específico pelo número.
     /// </summary>
-    /// <param name="numeroProcesso">Número CNJ do processo a ser consultado.</param>
-    /// <param name="cancellationToken">Token de cancelamento injetado automaticamente pelo ASP.NET Core caso o cliente interrompa a requisição.</param>
-    /// <response code="200">Retorna os dados detalhados do processo (via banco ou após raspagem em memória).</response>
-    /// <response code="400">O número do processo é inválido ou ocorreu erro de validação.</response>
-    /// <response code="404">Processo não encontrado ou inexistente no tribunal.</response>
-    /// <response code="499">Operação cancelada pelo cliente (front-end).</response>
-    /// <response code="500">Erro interno no servidor durante o processamento.</response>
+    /// <param name="numeroProcesso">Número do processo a ser consultado.</param>
+    /// <param name="cancellationToken">Token de cancelamento injetado automaticamente pelo .NET Core caso o cliente interrompa a requisição.</param>
     [HttpGet("{numeroProcesso}")]
     [ProducesResponseType(typeof(ProcessoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -57,7 +48,7 @@ public class ProcessosController : ControllerBase
 
         _logger.LogInformation("[API] Consultando processo: {NumeroProcesso}", numeroProcesso);
 
-        // 1. Tenta buscar no banco primeiro
+
         var processoBanco = await _appService.ObterPorNumeroAsync(numeroProcesso.Trim());
         if (processoBanco != null)
         {
@@ -67,7 +58,6 @@ public class ProcessosController : ControllerBase
 
         try
         {
-            // 2. Se não estiver no banco, executa a extração via tribunal estritamente em memória
             var resultadoColeta = await _appService.ColetarApenasAsync(numeroProcesso.Trim(), cancellationToken);
 
             if (!resultadoColeta.Sucesso)
@@ -95,8 +85,7 @@ public class ProcessosController : ControllerBase
     }
 
     /// <summary>
-    /// Recebe e persiste manualmente um processo coletado no banco de dados SQL através da ação do usuário.
-    /// Atende ao requisito do teste: POST /processos/salvar
+    /// Recebe e persiste um processo coletado no banco de dados.
     /// </summary>
     [HttpPost("salvar")]
     [ProducesResponseType(typeof(ProcessoDto), StatusCodes.Status200OK)]
@@ -116,11 +105,8 @@ public class ProcessosController : ControllerBase
     /// <summary>
     /// Executa coleta em lote para uma lista de números processuais.
     /// </summary>
-    /// <param name="numerosProcessos">Lista contendo os números CNJ dos processos que devem ser processados na fila.</param>
+    /// <param name="numerosProcessos">Lista contendo os números dos processos que devem ser processados na fila.</param>
     /// <param name="cancellationToken">Token de cancelamento para interromper o lote caso o operador solicite.</param>
-    /// <response code="200">Retorna o resultado consolidado da extração de cada item da fila.</response>
-    /// <response code="400">A lista de processos enviada é nula ou vazia.</response>
-    /// <response code="499">Processamento em lote cancelado pelo cliente.</response>
     [HttpPost("consultar-lote")]
     [ProducesResponseType(typeof(IEnumerable<ResultadoColetaDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -148,10 +134,8 @@ public class ProcessosController : ControllerBase
     /// <summary>
     /// Remove um processo específico do banco de dados e suas respectivas partes relacionadas.
     /// </summary>
-    /// <param name="tribunal" example="TJ-SP">Sigla do tribunal de origem do processo judicial.</param>
-    /// <param name="numeroProcesso" example="1501983-25.2022.8.26.0022">Número identificador único CNJ do processo.</param>
-    /// <response code="204">Processo e partes excluídos com sucesso.</response>
-    /// <response code="404">Processo não localizado para os parâmetros informados.</response>
+    /// <param name="tribunal" example="TJ-SP">Sigla do tribunal de origem do processo.</param>
+    /// <param name="numeroProcesso" example="1501983-25.2022.8.26.0022">Número do processo.</param>
     [HttpDelete("{tribunal}/{numeroProcesso}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

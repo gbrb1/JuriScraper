@@ -25,7 +25,7 @@ public class ProcessoDbContext : DbContext
             .HasForeignKey(tp => new { tp.ProcessoNumeroProcesso, tp.Tribunal })
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Mapeamento para aceitar DateTime sem exigir fuso horário UTC (evita o ArgumentException do Npgsql)
+        // mapeamento para aceitar DateTime sem exigir fuso horário UTC (evita o ArgumentException do Npgsql)
         modelBuilder.Entity<Processo>(entity =>
         {
             entity.Property(p => p.DataDistribuicao)

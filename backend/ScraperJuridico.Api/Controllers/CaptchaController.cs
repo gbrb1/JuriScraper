@@ -30,7 +30,7 @@ public class CaptchaController : ControllerBase
     }
 
     /// <summary>
-    /// Registra a escolha de grau/instância selecionada pelo operador para continuar a raspagem.
+    /// Registra a escolha de grau/instância selecionada pelo operador para continuar scrapando.
     /// </summary>
     /// <param name="sessionId">Identificador único da sessão.</param>
     /// <param name="request">Objeto contendo o índice da opção escolhida.</param>
