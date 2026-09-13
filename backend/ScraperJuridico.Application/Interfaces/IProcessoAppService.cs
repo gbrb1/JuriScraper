@@ -24,13 +24,9 @@ public interface IProcessoAppService
     /// </summary>
     Task<ProcessoDto> SalvarProcessoAsync(ProcessoDto processoDto);
 
-    /// <summary>
-    /// Gerencia e executa o processamento da fila de múltiplos processos em lote, respeitando o sinal de cancelamento.
-    /// </summary>
-    Task<IEnumerable<ResultadoColetaDto>> ColetarEArmazenarProcessosAsync(IEnumerable<string> numerosProcessos, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Orquestra a exclusão de um processo e suas partes vinculadas do banco.
     /// </summary>
-    Task<bool> ExcluirProcessoAsync(string numeroProcesso, string tribunal);
+    Task<bool> ExcluirProcessoAsync(string numeroProcesso, string tribunal, int grau);
 }

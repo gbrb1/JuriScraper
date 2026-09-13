@@ -4,6 +4,7 @@ public class Processo
 {
     public string NumeroProcesso { get; set; } = string.Empty;
     public string Tribunal { get; set; } = string.Empty;
+    public int Grau { get; set; } = 1;
     public string Classe { get; set; } = string.Empty;
     public string Assunto { get; set; } = string.Empty;
     public string Foro { get; set; } = string.Empty;

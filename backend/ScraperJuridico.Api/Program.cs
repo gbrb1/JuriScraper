@@ -25,7 +25,14 @@ builder.Services.AddScoped<IProcessoRepository, ProcessoRepository>();
 // Registro do serviço de aplicação
 builder.Services.AddScoped<IProcessoAppService, ProcessoAppService>();
 builder.Services.AddScoped<IScraperFactory, ScraperFactory>();
+
+// Gerenciador de Sessão (Graus de jurisdição e status das tentativas em memória)
 builder.Services.AddSingleton<CaptchaSessionManager>();
+
+// Solver local ONNX
+string onnxPath = Path.Combine(AppContext.BaseDirectory, "MlModels", "trt.onnx");
+builder.Services.AddSingleton<ICaptchaSolverService>(sp => new OnnxCaptchaSolverService(onnxPath));
+
 builder.Services.AddScoped<IScraperService, TjspScraper>();
 builder.Services.AddScoped<IScraperService, PjeTrtScraper>();
 
@@ -52,18 +59,11 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configuração do Swagger
-// fica disponível também no ambiente Docker
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// HTTPS desabilitado porque o container está expondo apenas HTTP
-// app.UseHttpsRedirection();
-
-// habilita o cors antes da autorização e dos controllers
 app.UseCors("Frontend");
-
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

@@ -1,6 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
+    <PackageReference Include="SkiaSharp" Version="4.152.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ScraperJuridico.Domain\ScraperJuridico.Domain.csproj" />
   </ItemGroup>
 

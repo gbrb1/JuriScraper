@@ -49,12 +49,12 @@ public class ProcessosController : ControllerBase
         _logger.LogInformation("[API] Consultando processo: {NumeroProcesso}", numeroProcesso);
 
 
-        var processoBanco = await _appService.ObterPorNumeroAsync(numeroProcesso.Trim());
-        if (processoBanco != null)
-        {
-            _logger.LogInformation("[API] Processo {NumeroProcesso} retornado diretamente do banco.", numeroProcesso);
-            return Ok(processoBanco);
-        }
+        //var processoBanco = await _appService.ObterPorNumeroAsync(numeroProcesso.Trim());
+        //if (processoBanco != null)
+        //{
+        //    _logger.LogInformation("[API] Processo {NumeroProcesso} retornado diretamente do banco.", numeroProcesso);
+        //    return Ok(processoBanco);
+        //}
 
         try
         {
@@ -102,46 +102,18 @@ public class ProcessosController : ControllerBase
         return Ok(processoSalvo);
     }
 
-    /// <summary>
-    /// Executa coleta em lote para uma lista de números processuais.
-    /// </summary>
-    /// <param name="numerosProcessos">Lista contendo os números dos processos que devem ser processados na fila.</param>
-    /// <param name="cancellationToken">Token de cancelamento para interromper o lote caso o operador solicite.</param>
-    [HttpPost("consultar-lote")]
-    [ProducesResponseType(typeof(IEnumerable<ResultadoColetaDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> ConsultarLote([FromBody] List<string> numerosProcessos, CancellationToken cancellationToken)
-    {
-        if (numerosProcessos == null || numerosProcessos.Count == 0)
-        {
-            return BadRequest(new { Mensagem = "A lista de processos não pode ser vazia." });
-        }
-
-        _logger.LogInformation("[API LOTE] Processando lote com {Total} processos via Application Service.", numerosProcessos.Count);
-
-        try
-        {
-            var resultados = await _appService.ColetarEArmazenarProcessosAsync(numerosProcessos, cancellationToken);
-            return Ok(resultados);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogWarning("[API LOTE] O processamento em lote foi cancelado pelo usuário.");
-            return StatusCode(499, new { Mensagem = "Operação em lote cancelada pelo cliente." });
-        }
-    }
 
     /// <summary>
     /// Remove um processo específico do banco de dados e suas respectivas partes relacionadas.
     /// </summary>
     /// <param name="tribunal" example="TJ-SP">Sigla do tribunal de origem do processo.</param>
     /// <param name="numeroProcesso" example="1501983-25.2022.8.26.0022">Número do processo.</param>
-    [HttpDelete("{tribunal}/{numeroProcesso}")]
+    [HttpDelete("{tribunal}/{grau}/{numeroProcesso}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Excluir(string tribunal, string numeroProcesso)
+    public async Task<IActionResult> Excluir(string tribunal, string numeroProcesso, int grau)
     {
-        var excluido = await _appService.ExcluirProcessoAsync(numeroProcesso, tribunal);
+        var excluido = await _appService.ExcluirProcessoAsync(numeroProcesso, tribunal, grau);
 
         if (!excluido)
         {

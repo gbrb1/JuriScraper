@@ -17,20 +17,40 @@ public class CaptchaController : ControllerBase
     }
 
     /// <summary>
+    /// Consulta se há um desafio de CAPTCHA em resolução para a sessão indicada.
+    /// </summary>
+    /// <param name="sessionId">Identificador único da sessão (apenas dígitos do processo).</param>
+    /// <response code="200">Retorna o estado da tentativa ativa de resolução.</response>
+    /// <response code="204">Nenhum CAPTCHA ativo sendo resolvido no momento.</response>
+    [HttpGet("status/{sessionId}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public IActionResult ObterStatus(string sessionId)
+    {
+        var status = _sessionManager.ObterStatusTentativa(sessionId);
+        if (status is null)
+        {
+            return NoContent();
+        }
+
+        return Ok(status);
+    }
+
+    /// <summary>
     /// Obtém as opções de grau de jurisdição disponíveis para um processo em andamento.
     /// </summary>
-    /// <param name="sessionId">Identificador único da sessão (geralmente os dígitos do número do processo).</param>
+    /// <param name="sessionId">Identificador único da sessão (apenas dígitos do processo).</param>
     /// <response code="200">Retorna a lista de opções de grau encontradas.</response>
     [HttpGet("opcoes-grau/{sessionId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult ObterOpcoesGrau(string sessionId)
     {
         var opcoes = _sessionManager.ObterOpcoesGrau(sessionId);
-        return Ok(new { Opcoes = opcoes });
+        return Ok(new { opcoes });
     }
 
     /// <summary>
-    /// Registra a escolha de grau/instância selecionada pelo operador para continuar scrapando.
+    /// Registra a escolha de grau/instância selecionada pelo operador para continuar a extração.
     /// </summary>
     /// <param name="sessionId">Identificador único da sessão.</param>
     /// <param name="request">Objeto contendo o índice da opção escolhida.</param>
@@ -49,59 +69,6 @@ public class CaptchaController : ControllerBase
 
         _logger.LogInformation("[SESSAO {SessionId}] Grau selecionado: {Indice}", sessionId, request.Indice);
         return Ok(new { Mensagem = "Grau selecionado com êxito." });
-    }
-
-    /// <summary>
-    /// Recupera os dados atuais do desafio de CAPTCHA para exibição na interface.
-    /// </summary>
-    /// <param name="sessionId">Identificador único da sessão.</param>
-    /// <response code="200">Retorna a imagem em Base64 e os metadados do CAPTCHA.</response>
-    /// <response code="404">Nenhum CAPTCHA ativo encontrado para a sessão informada.</response>
-    [HttpGet("{sessionId}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult ObterCaptcha(string sessionId)
-    {
-        var (imagemBase64, hash, houveErro, mensagemErro, versao) = _sessionManager.ObterDadosCaptcha(sessionId);
-        if (imagemBase64 is null)
-        {
-            return NotFound(new { Mensagem = "Nenhum CAPTCHA ativo para esta sessão." });
-        }
-
-        return Ok(new
-        {
-            Imagem = $"data:image/png;base64,{imagemBase64}",
-            Hash = hash,
-            HouveErro = houveErro,
-            MensagemErro = mensagemErro,
-            Versao = versao
-        });
-    }
-
-    /// <summary>
-    /// Envia a resposta digitada pelo usuário para o desafio de CAPTCHA ativo.
-    /// </summary>
-    /// <param name="sessionId">Identificador único da sessão.</param>
-    /// <param name="request">Objeto contendo o texto resolvido do CAPTCHA.</param>
-    /// <response code="200">Resposta repassada ao scraper com sucesso.</response>
-    /// <response code="400">Texto vazio ou sessão expirada/não encontrada.</response>
-    [HttpPost("{sessionId}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public IActionResult ResponderCaptcha(string sessionId, [FromBody] RespostaCaptchaDto request)
-    {
-        if (string.IsNullOrWhiteSpace(request?.Texto))
-        {
-            return BadRequest(new { Mensagem = "O texto do CAPTCHA não pode ser vazio." });
-        }
-
-        var resolvido = _sessionManager.ResponderCaptcha(sessionId, request.Texto.Trim());
-        if (!resolvido)
-        {
-            return BadRequest(new { Mensagem = "Sessão expirada ou não encontrada." });
-        }
-
-        return Ok(new { Mensagem = "Resposta repassada ao scraper com sucesso." });
     }
 
     /// <summary>
@@ -130,4 +97,3 @@ public class CaptchaController : ControllerBase
 }
 
 public record EscolhaGrauDto(int Indice);
-public record RespostaCaptchaDto(string Texto);

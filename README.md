@@ -1,10 +1,10 @@
-# ⚖️JuriScraper
+# ⚖️ JuriScraper
 
 ## Automação de Consulta e Integração de Processos Judiciais
 
-O **JuriScraper** é uma aplicação para consulta automatizada de processos judiciais nos portais do **TJSP** e **PJe-TRT**, realizando a extração, persistência e disponibilização dos dados por meio de uma API REST.
+O **JuriScraper** é uma aplicação completa para consulta automatizada de processos judiciais nos portais do **TJSP** e **PJe-TRT**, realizando extração em tempo real via **Playwright**, resolução automática de CAPTCHAs via **ONNX**, persistência em banco, e disponibilização dos dados por meio de uma API REST acompanhada de uma interface moderna em React.
 
-O sistema permite consultas individuais e em lote, armazenamento local dos processos consultados, re-extração de dados diretamente dos tribunais e interação manual para resolução de CAPTCHA quando necessário.
+O sistema permite consultas individuais e em lote, pesquisa em registros locais, persistência condicional inteligente (apenas quando novos dados são detectados) e sincronização independente de instâncias (1º e 2º Grau).
 
 ---
 
@@ -19,321 +19,161 @@ O sistema permite consultas individuais e em lote, armazenamento local dos proce
 ### 1.2 Clonar o projeto
 
 Clone o repositório:
-
-```bash
+```
 git clone https://github.com/gbrb1/JuriScraper.git
 ```
-
 Entre na pasta do projeto:
-
-```bash
+```
 cd JuriScraper
 ```
-
 ### 1.3 Iniciar a aplicação pela primeira vez
 
 Na primeira execução, utilize:
-
-```bash
+```
 docker compose up --build
 ```
-
 O Docker irá:
 
-* baixar as imagens necessárias
-* criar o container do PostgreSQL
-* inicializar o banco de dados
-* aplicar automaticamente as migrations
-* construir a API
-* construir o frontend
-* instalar as dependências necessárias para o Chromium
-* baixar o Chromium utilizado pelo Playwright
-* iniciar todos os serviços
-
-A primeira execução pode levar alguns minutos devido ao download das imagens e dependências.
+* Baixar as imagens necessárias (.NET, Node, PostgreSQL)
+* Criar e inicializar o container do PostgreSQL (5432)
+* Construir a API (.NET) com o runtime ONNX e o Playwright
+* Instalar as dependências do SO no container e baixar o Chromium
+* Construir o frontend React 
+* Iniciar todos os serviços conectados em rede interna
 
 ### 1.4 Execuções seguintes
 
-Após a primeira execução, caso não tenha ocorrido nenhuma alteração que exija uma nova build, basta executar:
-
-```bash
+Para inicializar em segundo plano liberando o terminal:
+```
 docker compose up -d
 ```
-
-Caso tenha alterado o código e queira reconstruir as imagens:
-
-```bash
+Caso altere o código e queira reconstruir as imagens:
+```
 docker compose up --build -d
 ```
-
-O parâmetro `-d` executa os containers em segundo plano, liberando o terminal.
-
 ### 1.5 🌐 Endereços de Acesso
 
-A **porta de entrada da aplicação** é:
-
-```text
-http://localhost:3000
-```
-
-**API:**
-
-```text
-http://localhost:5189
-```
-
-**Swagger:**
-
-```text
-http://localhost:5189/swagger
-```
+* **Interface Web (Frontend):** http://localhost:3000
+* **API REST:** http://localhost:5189
+* **Swagger UI:** http://localhost:5189/swagger
 
 ---
 
 ## 2. Consulta Individual
 
-Acesse a **porta de entrada da aplicação**:
+1. Acesse http://localhost:3000.
+2. No campo de busca superior, insira o número CNJ completo (ex: 0010263-82.2026.5.15.0052).
+3. Clique em **Consultar**.
 
-```text
-http://localhost:3000
-```
+> **Comportamento da Busca Superior:** A busca principal **sempre consulta o tribunal ao vivo diretamente**, sem bloquear ou reaproveitar dados desatualizados do banco local.
 
-No campo **Número do Processo**, informe o número CNJ completo.
-
-Exemplo:
-
-```text
-1501983-25.2022.8.26.0022
-```
-
-Clique em **Consultar**.
-
-O sistema irá:
-
-* identificar automaticamente o tribunal pelo número CNJ
-* verificar se o processo já está armazenado no banco
-* retornar os dados armazenados quando disponíveis
-* realizar uma consulta ao tribunal caso o processo ainda não esteja salvo
-
-Para ignorar os dados armazenados e realizar uma nova consulta diretamente no tribunal, utilize o botão:
-
-```text
-🔄 Buscar novas informações no tribunal
-```
+### 💾 Salvamento Condicional Inteligente
+Após o scrape, os dados extraídos são confrontados com os registros salvos:
+* **Se o processo não existir no banco** ou **se houver novas movimentações/alterações cadastrais**: O botão "💾 Salvar" fica disponível para inclusão/atualização.
+* **Se os dados extraídos forem idênticos aos do banco**: A interface exibe a tag "✓ Sincronizado" e dispensa gravação redundante.
 
 ---
 
 ## 3. Consulta em Lote
 
-Na seção **Consulta em Lote**:
+Na aba **Consulta em Lote**:
 
-1. Cole os números dos processos na caixa de texto
-2. Informe **um processo por linha**
-3. Clique em **Iniciar Extração em Lote**
+1. Cole a lista de processos no campo de texto (um número CNJ por linha).
+2. Clique em **Iniciar Extração em Lote**.
 
-Exemplo:
-
-```text
-0000234-11.2026.5.12.0034
-0020169-74.2026.5.04.0029
-1501983-25.2022.8.26.0022
-1501843-43.2019.8.26.0653
-```
-
-Os processos são tratados sequencialmente.
-
-Caso algum processo apresente erro, como número inválido, processo indisponível ou acesso restrito, o erro será registrado e o sistema continuará automaticamente com os próximos processos da fila.
+O processamento é executado sequencialmente. Erros pontuais em um processo (ex: número inexistente ou tribunal fora do ar) são registrados de forma isolada na lista de status, permitindo que a fila continue rodando até o fim sem interrupções.
 
 ---
 
-## 4. Seleção de Instância
+## 4. Múltiplas Instâncias e Graus de Jurisdição
 
-Em determinadas consultas no PJe, o mesmo número de processo pode estar disponível em mais de uma instância.
+O PJe permite que o mesmo número CNJ tramite no 1º Grau (Vara) e 2º Grau (Tribunal). O **JuriScraper** trata a chave primária composta por (NumeroProcesso, Tribunal, Grau):
 
-Quando isso ocorrer, a aplicação exibirá as instâncias encontradas, por exemplo:
+* Quando o PJe identifica mais de uma instância, a aplicação exibe um painel para que o usuário escolha qual grau deseja extrair.
 
-```text
-1º Grau — Vara do Trabalho
-2º Grau — Tribunal Regional
-```
-
-Selecione o grau desejado para continuar a consulta.
 
 ---
 
-## 5. Resolução de CAPTCHA
+## 5. Resolução Automática de CAPTCHA via IA (ONNX)
 
-Durante consultas aos portais PJe dos Tribunais Regionais do Trabalho, o tribunal pode solicitar uma verificação CAPTCHA.
+Durante a consulta a portais PJe-TRT com desafio visual:
 
-Quando isso ocorrer:
-
-1. Um alerta será exibido na aplicação
-2. A imagem do CAPTCHA será apresentada em um modal
-3. Digite os caracteres exibidos
-4. Clique em **Confirmar**
-
-Caso a imagem esteja ilegível ou seja necessário interromper a consulta:
-
-```text
-⛔ Cancelar
-```
-
-A resolução é realizada mediante interação do usuário. O sistema não utiliza mecanismos automatizados para contornar o CAPTCHA.
-
-O sistema verifica se houve mudança na imagem do CAPTCHA e, caso mude, a nova imagem será mostrada ao usuário.
+* O sistema extrai a imagem do CAPTCHA em memória e alimenta um modelo **ONNX** acoplado ao runtime do C#.
+* A inferência do texto é feita localmente, preenchendo e submetendo o formulário automaticamente.
+* Na interface, o usuário visualiza o status animado **"⚠️ Resolvendo CAPTCHA..."** até a liberação da tela de andamentos.
+* O botão **⛔ Cancelar** permite abortar a requisição e interromper a instância do navegador a qualquer momento.
 
 ---
 
-## 6. Histórico e Gerenciamento
+## 6. Processos Salvos e Filtro Local
 
-Abaixo das áreas de consulta, a aplicação apresenta os processos armazenados localmente.
+Abaixo da área de consulta fica a tabela com o histórico de processos persistidos:
 
-### 🔎 Ver detalhes
-
-Clique em um processo para visualizar informações como:
-
-* número do processo
-* tribunal
-* classe
-* assunto
-* foro/comarca
-* data de distribuição
-* partes envolvidas
-* data e conteúdo da última movimentação
-
-### 🔄 Buscar novas informações no tribunal
-
-Realiza uma nova consulta diretamente no tribunal, ignorando os dados armazenados localmente.
-
-### 🗑️ Excluir
-
-Remove o processo e seus dados relacionados do banco de dados local.
+* **Search Box Local:** Permite filtrar instantaneamente a listagem salva por número CNJ, tribunal, vara/foro ou classe judicial sem precisar bater na rede.
+* **Ver Detalhes:** Carrega os dados salvos localmente na visualização superior.
+* **🔄 Re-extrair:** Realiza scrape no portal do tribunal para atualizar o registro salvo.
+* **🗑️ Excluir:** Remove o processo e suas partes relacionadas do banco de dados PostgreSQL.
 
 ### 🛑 Encerrar a aplicação
 
-Se os containers estiverem sendo executados em segundo plano, utilize:
-
-```bash
+Para parar e remover os containers:
+```
 docker compose down
 ```
-
-Para iniciar novamente:
-
-```bash
-docker compose up -d
-```
-
 ---
 
 # 🔌 API e Principais Endpoints
 
-A API está disponível em:
-
-```text
-http://localhost:5189
-```
-
-A documentação interativa da API pode ser acessada em:
-
-```text
-http://localhost:5189/swagger
-```
-
 - ### Listar todos os processos
-
 ```http
-GET /api/Processos
+GET /api/Processos/ListarTodos
 ```
+Retorna todos os processos salvos no banco de dados.
 
-Retorna todos os processos armazenados no banco de dados.
-
-- ### Consultar processo por número
-
+- ### Consultar processo
 ```http
-GET /api/Processos/{numeroProcesso}
+GET /api/Processos/ConsultarPorNumero
 ```
-
-Consulta um processo pelo número informado.
-
-Caso o processo já esteja armazenado, os dados são retornados diretamente do banco. Caso contrário, uma nova consulta é realizada no tribunal.
-
-Exemplo:
-
-```http
-GET /api/Processos/1501983-25.2022.8.26.0022
-```
+Executa o scraper em tempo real no portal do tribunal competente e retorna os dados coletados.
 
 - ### Salvar processo
-
 ```http
-POST /api/Processos/salvar
+POST /api/Processos/SalvarProcesso
 ```
-
-Recebe os dados de um processo e realiza sua persistência no banco de dados.
-
-- ### Consultar processos em lote
-
-```http
-POST /api/Processos/consultar-lote
-```
-
-Recebe uma lista de números de processos e realiza a coleta sequencialmente.
-
-Exemplo de corpo da requisição:
-
-```json
-[
-  "0000234-11.2026.5.12.0034",
-  "0020169-74.2026.5.04.0029",
-  "1501983-25.2022.8.26.0022"
-]
-```
-
-Os processos que apresentarem erro são registrados individualmente, permitindo que o processamento continue com os demais processos do lote.
+Salva processo em banco.
 
 - ### Excluir processo
-
 ```http
-DELETE /api/Processos/{tribunal}/{numeroProcesso}
+DELETE /api/Processos/Excluir
 ```
+Remove o processo do banco.
 
-Remove o processo e suas partes relacionadas do banco de dados.
-
-Exemplo:
-
-```http
-DELETE /api/Processos/TJ-SP/1501983-25.2022.8.26.0022
-```
 
 ---
 
 # 🏛️ Tribunais Suportados
 
-O sistema possui suporte para:
-
-**⚖️ TJSP**
-
-**⚖️ Tribunais Regionais do Trabalho (PJe-TRT)**
-
-O tribunal é identificado automaticamente a partir do número CNJ informado.
+* **TJSP (e-SAJ):** 1º Grau e Colégio Recursal
+* **TRT-2 (SP / Região Metropolitana):** PJe 1º e 2º Grau
+* **TRT-4 (RS):** PJe 1º e 2º Grau
+* **TRT-12 (SC):** PJe 1º e 2º Grau
+* **TRT-15 (Campinas e Interior de SP):** PJe 1º e 2º Grau
 
 ---
 
-# 🧱 Tecnologias
-
-## Backend
+- # Backend
 
 🟣 **.NET**
 
 🎭 **Playwright**
 
-## Frontend
+- # Frontend
 
 ⚛️ **React**
 
 ⚡ **Vite**
 
-## Infraestrutura
+- # Infraestrutura
 
 🐳 **Docker**
 
@@ -345,7 +185,7 @@ O tribunal é identificado automaticamente a partir do número CNJ informado.
 
 # 🏗️ Arquitetura
 
-O backend utiliza **Clean Architecture**, separando as responsabilidades em diferentes projetos:
+O backend segue os princípios de **Clean Architecture**, isolando as dependências de IO externo e bibliotecas nativas das regras de domínio:
 
 ```text
 JuriScraper
@@ -363,28 +203,14 @@ JuriScraper
     └── Controllers e exposição da API
 ```
 
-Essa separação mantém as regras de negócio independentes das tecnologias utilizadas para persistência, scraping e exposição HTTP.
-
 ---
 
 # 📋 Dados Extraídos
 
-Quando disponíveis nos tribunais consultados, o sistema busca informações como:
-
-* Número do processo
-* Classe processual
-* Assunto
-* Foro/Comarca
-* Data de distribuição
-* Partes
-* Última movimentação
-* Data da última movimentação
-
-
----
-
-# ⚠️ Observações
-
-A disponibilidade das informações depende dos próprios portais dos tribunais.
-
-Processos em segredo de justiça, números inválidos, indisponibilidade temporária do tribunal ou mecanismos de segurança podem impedir a obtenção de determinados dados.
+* Número CNJ do processo
+* Tribunal e Grau de Jurisdição (1º ou 2º Grau)
+* Classe Processual
+* Assunto Principal
+* Foro / Comarca / Órgão Julgador
+* Polos e Partes Envolvidas (Autor, Réu, Advogados)
+* Data e descrição do último andamento processual

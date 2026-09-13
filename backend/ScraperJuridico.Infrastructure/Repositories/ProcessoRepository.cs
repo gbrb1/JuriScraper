@@ -32,7 +32,7 @@ public class ProcessoRepository : IProcessoRepository
     {
         var existente = await _context.Processos
             .Include(p => p.Partes)
-            .FirstOrDefaultAsync(p => p.NumeroProcesso == processo.NumeroProcesso && p.Tribunal == processo.Tribunal);
+            .FirstOrDefaultAsync(p => p.NumeroProcesso == processo.NumeroProcesso && p.Tribunal == processo.Tribunal && p.Grau == processo.Grau);
 
         if (existente is null)
         {
@@ -46,7 +46,6 @@ public class ProcessoRepository : IProcessoRepository
             existente.DataDistribuicao = processo.DataDistribuicao;
             existente.UltimoAndamento = processo.UltimoAndamento;
             existente.DataUltimoAndamento = processo.DataUltimoAndamento;
-
             _context.Partes.RemoveRange(existente.Partes);
             existente.Partes = processo.Partes;
         }
@@ -54,11 +53,11 @@ public class ProcessoRepository : IProcessoRepository
         await _context.SaveChangesAsync();
     }
 
-    public async Task<bool> ExcluirAsync(string numeroProcesso, string tribunal)
+    public async Task<bool> ExcluirAsync(string numeroProcesso, string tribunal, int grau)
     {
         var existente = await _context.Processos
             .Include(p => p.Partes)
-            .FirstOrDefaultAsync(p => p.NumeroProcesso == numeroProcesso && p.Tribunal == tribunal);
+            .FirstOrDefaultAsync(p => p.NumeroProcesso == numeroProcesso && p.Tribunal == tribunal && p.Grau == grau);
 
         if (existente is null)
             return false;

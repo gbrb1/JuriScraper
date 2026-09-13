@@ -7,5 +7,5 @@ public interface IProcessoRepository
     Task<IEnumerable<Processo>> ObterTodosAsync();
     Task<Processo?> ObterPorNumeroAsync(string numeroProcesso);
     Task SalvarOuAtualizarAsync(Processo processo);
-    Task<bool> ExcluirAsync(string numeroProcesso, string tribunal);
+    Task<bool> ExcluirAsync(string numeroProcesso, string tribunal, int grau);
 }

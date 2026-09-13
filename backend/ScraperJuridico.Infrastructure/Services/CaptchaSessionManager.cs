@@ -9,23 +9,56 @@ public class OpcaoProcessoDto
     public string Texto { get; set; } = string.Empty;
 }
 
+public class StatusCaptchaDto
+{
+    public int Tentativa { get; set; }
+    public int Max { get; set; }
+}
+
 public class CaptchaSessionManager
 {
     private class SolicitacaoSessao
     {
-        // escolha de Grau
+        // Escolha de Grau
         public List<OpcaoProcessoDto> OpcoesGrau { get; set; } = new();
         public TaskCompletionSource<int> TcsEscolhaGrau { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        // CAPTCHA
-        public string ImagemBase64 { get; set; } = string.Empty;
-        public string HashImagem { get; set; } = string.Empty;
-        public bool HouveErroValidacao { get; set; } = false;
-        public string? MensagemErro { get; set; } = null;
-        public int VersaoTentativa { get; set; } = 0; // incrementador p o front detectar nova tentativa mesmo com o mesmo hash
-        public TaskCompletionSource<string> TcsCaptcha { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Status das Tentativas Automáticas (para exibição no front-end)
+        public int TentativaAtual { get; set; } = 0;
+        public int MaxTentativas { get; set; } = 10;
     }
 
     private readonly ConcurrentDictionary<string, SolicitacaoSessao> _sessoes = new();
+
+    // ================= STATUS DAS TENTATIVAS AUTOMÁTICAS =================
+
+    public void AtualizarTentativa(string sessionId, int tentativa, int max = 10)
+    {
+        var sessao = _sessoes.GetOrAdd(sessionId, _ => new SolicitacaoSessao());
+        sessao.TentativaAtual = tentativa;
+        sessao.MaxTentativas = max;
+    }
+
+    public StatusCaptchaDto? ObterStatusTentativa(string sessionId)
+    {
+        if (_sessoes.TryGetValue(sessionId, out var sessao) && sessao.TentativaAtual > 0)
+        {
+            return new StatusCaptchaDto
+            {
+                Tentativa = sessao.TentativaAtual,
+                Max = sessao.MaxTentativas
+            };
+        }
+        return null;
+    }
+
+    public void LimparStatusTentativa(string sessionId)
+    {
+        if (_sessoes.TryGetValue(sessionId, out var sessao))
+        {
+            sessao.TentativaAtual = 0;
+        }
+    }
 
     // ================= FLUXO DE ESCOLHA DE GRAU =================
 
@@ -56,50 +89,7 @@ public class CaptchaSessionManager
         return false;
     }
 
-    public void AtualizarImagem(string sessionId, byte[] imagemBytes, bool houveErro, string? mensagemErro = null)
-    {
-        var novoHash = CalcularHash(imagemBytes);
-        var sessao = _sessoes.GetOrAdd(sessionId, _ => new SolicitacaoSessao());
-
-        sessao.ImagemBase64 = Convert.ToBase64String(imagemBytes);
-        sessao.HashImagem = novoHash;
-        sessao.HouveErroValidacao = houveErro;
-        sessao.MensagemErro = mensagemErro;
-        sessao.VersaoTentativa++;
-    }
-
-    public async Task<string> AguardarRespostaCaptchaAsync(string sessionId, TimeSpan timeout)
-    {
-        if (!_sessoes.TryGetValue(sessionId, out var sessao))
-        {
-            throw new InvalidOperationException($"Sessão {sessionId} não encontrada.");
-        }
-
-        sessao.TcsCaptcha = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        using var cts = new CancellationTokenSource(timeout);
-        using var reg = cts.Token.Register(() => sessao.TcsCaptcha.TrySetCanceled());
-
-        return await sessao.TcsCaptcha.Task;
-    }
-
-    public (string? ImagemBase64, string Hash, bool HouveErro, string? MensagemErro, int Versao) ObterDadosCaptcha(string sessionId)
-    {
-        if (_sessoes.TryGetValue(sessionId, out var sessao))
-        {
-            return (sessao.ImagemBase64, sessao.HashImagem, sessao.HouveErroValidacao, sessao.MensagemErro, sessao.VersaoTentativa);
-        }
-        return (null, string.Empty, false, null, 0);
-    }
-
-    public bool ResponderCaptcha(string sessionId, string respostaTexto)
-    {
-        if (_sessoes.TryGetValue(sessionId, out var sessao))
-        {
-            return sessao.TcsCaptcha.TrySetResult(respostaTexto);
-        }
-        return false;
-    }
+    // ================= CICLO DE VIDA E UTILITÁRIOS =================
 
     public void FinalizarSessao(string sessionId)
     {

@@ -14,18 +14,18 @@ public class ProcessoDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // chave composta p caso tenha + de 1 instancia
+        // Chave primária composta suportando múltiplas instâncias (1º, 2º grau)
         modelBuilder.Entity<Processo>()
-            .HasKey(p => new { p.NumeroProcesso, p.Tribunal });
+            .HasKey(p => new { p.NumeroProcesso, p.Tribunal, p.Grau });
 
-        // relação 1 pra N usando as colunas compostas
+        // Relação 1 pra N com chave estrangeira composta de 3 colunas
         modelBuilder.Entity<Processo>()
             .HasMany(p => p.Partes)
             .WithOne(tp => tp.Processo)
-            .HasForeignKey(tp => new { tp.ProcessoNumeroProcesso, tp.Tribunal })
+            .HasForeignKey(tp => new { tp.ProcessoNumeroProcesso, tp.Tribunal, tp.Grau })
             .OnDelete(DeleteBehavior.Cascade);
 
-        // mapeamento para aceitar DateTime sem exigir fuso horário UTC (evita o ArgumentException do Npgsql)
+        // Mapeamento para aceitar DateTime sem exigir fuso horário UTC (evita ArgumentException do Npgsql no PostgreSQL)
         modelBuilder.Entity<Processo>(entity =>
         {
             entity.Property(p => p.DataDistribuicao)

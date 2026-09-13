@@ -21,11 +21,16 @@ public class PjeTrtScraper : IScraperService
     };
 
     private readonly ILogger<PjeTrtScraper> _logger;
+    private readonly ICaptchaSolverService _captchaSolver;
     private readonly CaptchaSessionManager _sessionManager;
 
-    public PjeTrtScraper(ILogger<PjeTrtScraper> logger, CaptchaSessionManager sessionManager)
+    public PjeTrtScraper(
+        ILogger<PjeTrtScraper> logger,
+        ICaptchaSolverService captchaSolver,
+        CaptchaSessionManager sessionManager)
     {
         _logger = logger;
+        _captchaSolver = captchaSolver;
         _sessionManager = sessionManager;
     }
 
@@ -45,6 +50,7 @@ public class PjeTrtScraper : IScraperService
         var trtCodigo = matchTrt.Groups["trt"].Value;
         var subdominio = SubdominiosTrt[trtCodigo];
         var apenasDigitos = Regex.Replace(numeroProcesso, @"\D", "");
+        int grauProcesso = 1;
 
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
@@ -52,7 +58,6 @@ public class PjeTrtScraper : IScraperService
             Headless = true
         });
 
-        // fecha o navegador se o usuário cancelar no front
         using var registration = cancellationToken.Register(async () =>
         {
             try
@@ -62,12 +67,13 @@ public class PjeTrtScraper : IScraperService
             catch { }
         });
 
-        var context = await browser.NewContextAsync(new()
+        await using var context = await browser.NewContextAsync(new()
         {
             UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             ViewportSize = new ViewportSize { Width = 1366, Height = 768 },
             Locale = "pt-BR"
         });
+
         var page = await context.NewPageAsync();
         await page.AddInitScriptAsync("Object.defineProperty(navigator, 'webdriver', { get: () => undefined })");
 
@@ -78,7 +84,7 @@ public class PjeTrtScraper : IScraperService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // verificação de tribunal indisponível
+        // Verificação de tribunal indisponível
         var telaIndisponivel = page.Locator("text=Sistema temporariamente indisponível").First;
         try
         {
@@ -91,11 +97,9 @@ public class PjeTrtScraper : IScraperService
             _logger.LogWarning("[PJE TRT-{Trt}] Tribunal em manutenção ou indisponível.", trtCodigo);
             throw new HttpRequestException($"Tribunal TRT-{trtCodigo} temporariamente indisponível.");
         }
-        catch (TimeoutException)
-        {
-        }
+        catch (TimeoutException) { }
 
-        // verificação imediata se o processo já abriu com erro (#painel-erro)
+        // Verificação se abriu com erro imediato (#painel-erro)
         var painelErroInicial = page.Locator("#painel-erro").First;
         try
         {
@@ -112,17 +116,15 @@ public class PjeTrtScraper : IScraperService
                     ? "Ocorreu um erro ao consultar o processo no tribunal."
                     : txtErro.Trim();
 
-                _logger.LogWarning("[PJE TRT-{Trt}] Processo inexistente ou inválido detectado de início (#painel-erro): '{Msg}'", trtCodigo, msgFinal);
+                _logger.LogWarning("[PJE TRT-{Trt}] Processo inexistente ou inválido detectado (#painel-erro): '{Msg}'", trtCodigo, msgFinal);
                 throw new KeyNotFoundException(msgFinal);
             }
         }
-        catch (TimeoutException)
-        {
-        }
+        catch (TimeoutException) { }
 
         try
         {
-            // tela de escolha de instância (1/2 grau)
+            // Tela de escolha de instância (1/2 grau)
             var painelEscolha = page.Locator("#painel-escolha-processo").First;
             try
             {
@@ -132,9 +134,7 @@ public class PjeTrtScraper : IScraperService
                     Timeout = 4000
                 });
             }
-            catch (TimeoutException)
-            {
-            }
+            catch (TimeoutException) { }
 
             if (await painelEscolha.IsVisibleAsync())
             {
@@ -156,9 +156,16 @@ public class PjeTrtScraper : IScraperService
 
                 cancellationToken.ThrowIfCancellationRequested();
 
-                _logger.LogInformation("[PJE TRT-{Trt}] Clicando no grau selecionado: índice {Indice}", trtCodigo, indiceEscolhido);
+                var opcaoEscolhida = opcoes.FirstOrDefault(o => o.Indice == indiceEscolhido);
+                if (opcaoEscolhida != null)
+                {
+                    var txt = opcaoEscolhida.Texto;
+                    grauProcesso = Regex.IsMatch(txt, @"\b2[ºªoa°]\b|2º\s*grau|segund[ao]\s*(grau|inst[âa]ncia)|tribunal", RegexOptions.IgnoreCase) ? 2 : 1;
+                }
 
-                var waitNovaAbaTask = context.WaitForPageAsync(new BrowserContextWaitForPageOptions { Timeout = 4000 });
+                _logger.LogInformation("[PJE TRT-{Trt}] Clicando no grau selecionado: índice {Indice} (Grau: {Grau})", trtCodigo, indiceEscolhido, grauProcesso);
+
+                var waitNovaAbaTask = context.WaitForPageAsync(new BrowserContextWaitForPageOptions { Timeout = 5000 });
                 await page.Locator("#painel-escolha-processo button.selecao-processo").Nth(indiceEscolhido).ClickAsync();
 
                 try
@@ -180,18 +187,19 @@ public class PjeTrtScraper : IScraperService
                 await Task.Delay(1500, cancellationToken);
             }
 
-            // detecção e resolução de CAPTCHA
+            // ==========================================
+            // RESOLUÇÃO AUTOMÁTICA DO CAPTCHA VIA ONNX
+            // ==========================================
             var imgCaptcha = page.Locator("#imagemCaptcha").First;
-            const int maxTentativas = 5;
+            const int maxTentativas = 10;
             int tentativaAtual = 0;
-            bool erroAnterior = false;
-            string? mensagemErroAlerta = null;
+            string ultimoHashImagem = string.Empty;
 
             while (tentativaAtual < maxTentativas)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var visivel = await imgCaptcha.IsVisibleAsync();
+                bool visivel = await imgCaptcha.IsVisibleAsync();
                 if (!visivel && tentativaAtual == 0)
                 {
                     try
@@ -199,77 +207,54 @@ public class PjeTrtScraper : IScraperService
                         await imgCaptcha.WaitForAsync(new LocatorWaitForOptions
                         {
                             State = WaitForSelectorState.Visible,
-                            Timeout = 5000
+                            Timeout = 4000
                         });
                         visivel = true;
                     }
                     catch (TimeoutException)
                     {
-                        _logger.LogInformation("[PJE TRT-{Trt}] Nenhum CAPTCHA exigido. Prosseguindo...", trtCodigo);
+                        _logger.LogInformation("[PJE TRT-{Trt}] Nenhum CAPTCHA solicitado. Prosseguindo...", trtCodigo);
                         break;
                     }
                 }
 
                 if (!visivel)
                 {
-                    _logger.LogInformation("[PJE TRT-{Trt}] CAPTCHA superado!", trtCodigo);
+                    _logger.LogInformation("[PJE TRT-{Trt}] CAPTCHA superado com sucesso!", trtCodigo);
                     break;
                 }
 
                 tentativaAtual++;
-                _logger.LogInformation("[PJE TRT-{Trt}] Ciclo CAPTCHA (Tentativa {Tentativa}/{Max})...", trtCodigo, tentativaAtual, maxTentativas);
 
-                await Task.Delay(400, cancellationToken);
-                var imagemBytes = await imgCaptcha.ScreenshotAsync();
+                _sessionManager.AtualizarTentativa(apenasDigitos, tentativaAtual, maxTentativas);
+                _logger.LogInformation("[PJE TRT-{Trt}] Tentativa {Tentativa}/{Max}...", trtCodigo, tentativaAtual, maxTentativas);
 
-                _sessionManager.AtualizarImagem(apenasDigitos, imagemBytes, erroAnterior, mensagemErroAlerta);
+                byte[] imagemBytes = await imgCaptcha.ScreenshotAsync();
+                string hashAtual = CaptchaSessionManager.CalcularHash(imagemBytes);
 
-                using var ctsMonitor = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                var monitorTask = Task.Run(async () =>
+                if (!string.IsNullOrEmpty(ultimoHashImagem) && hashAtual == ultimoHashImagem)
                 {
-                    string ultimoHash = CaptchaSessionManager.CalcularHash(imagemBytes);
-                    while (!ctsMonitor.Token.IsCancellationRequested)
+                    for (int espera = 0; espera < 15; espera++)
                     {
-                        try
-                        {
-                            await Task.Delay(1200, ctsMonitor.Token);
-                            if (await imgCaptcha.IsVisibleAsync())
-                            {
-                                var bytesAtuais = await imgCaptcha.ScreenshotAsync();
-                                var hashAtual = CaptchaSessionManager.CalcularHash(bytesAtuais);
-
-                                if (hashAtual != ultimoHash)
-                                {
-                                    _logger.LogInformation("[PJE TRT-{Trt}] Imagem atualizou no portal. Atualizando front...", trtCodigo);
-                                    ultimoHash = hashAtual;
-                                    _sessionManager.AtualizarImagem(apenasDigitos, bytesAtuais, houveErro: false, mensagemErro: null);
-                                }
-                            }
-                        }
-                        catch
-                        {
-                        }
+                        await Task.Delay(250, cancellationToken);
+                        if (!await imgCaptcha.IsVisibleAsync()) break;
+                        imagemBytes = await imgCaptcha.ScreenshotAsync();
+                        hashAtual = CaptchaSessionManager.CalcularHash(imagemBytes);
+                        if (hashAtual != ultimoHashImagem) break;
                     }
-                }, ctsMonitor.Token);
-
-                string textoDigitado;
-                try
-                {
-                    textoDigitado = await _sessionManager.AguardarRespostaCaptchaAsync(apenasDigitos, TimeSpan.FromMinutes(2));
-                }
-                finally
-                {
-                    ctsMonitor.Cancel();
                 }
 
-                cancellationToken.ThrowIfCancellationRequested();
+                ultimoHashImagem = hashAtual;
 
-                _logger.LogInformation("[PJE TRT-{Trt}] Preenchendo resposta: '{Texto}'", trtCodigo, textoDigitado);
+                string textoResolvido = _captchaSolver.Resolver(imagemBytes);
+                _logger.LogInformation("[PJE TRT-{Trt}] ONNX inferiu: '{Texto}'", trtCodigo, textoResolvido);
 
                 var inputCaptcha = page.Locator("#captchaInput");
                 await inputCaptcha.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 3000 });
                 await inputCaptcha.FillAsync("");
-                await inputCaptcha.FillAsync(textoDigitado);
+                await inputCaptcha.FillAsync(textoResolvido);
+
+                await Task.Delay(200, cancellationToken);
 
                 var btnEnviar = page.Locator("button:has-text('ENVIAR'), button[type='submit'], mat-dialog-container button[type='submit']").First;
                 if (await btnEnviar.IsVisibleAsync())
@@ -277,65 +262,54 @@ public class PjeTrtScraper : IScraperService
                     await btnEnviar.ClickAsync();
                 }
 
-                string textoSnack = string.Empty;
-                try
+                // Espera inteligente: monitora fechamento do modal ou retorno de snack-bar
+                bool captchaSuperado = false;
+                for (int check = 0; check < 8; check++)
                 {
+                    await Task.Delay(350, cancellationToken);
+
                     var snackBar = page.Locator("snack-bar-container, simple-snack-bar, .mat-snack-bar-container, mat-error").First;
-                    await snackBar.WaitForAsync(new LocatorWaitForOptions
+                    if (await snackBar.IsVisibleAsync())
                     {
-                        State = WaitForSelectorState.Visible,
-                        Timeout = 1500
-                    });
+                        _logger.LogWarning("[PJE TRT-{Trt}] Erro detectado no snack-bar. Resolução falhou.", trtCodigo);
+                        break;
+                    }
 
-                    var rawText = await snackBar.InnerTextAsync();
-                    textoSnack = rawText.Replace("Fechar", "").Replace("FECHAR", "").Trim();
-                    _logger.LogWarning("[PJE TRT-{Trt}] Mensagem interceptada: '{Texto}'", trtCodigo, textoSnack);
+                    if (!await imgCaptcha.IsVisibleAsync())
+                    {
+                        captchaSuperado = true;
+                        break;
+                    }
                 }
-                catch (TimeoutException)
-                {
-                }
 
-                await Task.Delay(800, cancellationToken);
-
-                if (await imgCaptcha.IsVisibleAsync())
+                if (captchaSuperado)
                 {
-                    mensagemErroAlerta = !string.IsNullOrWhiteSpace(textoSnack)
-                        ? textoSnack
-                        : "Os caracteres informados estão inválidos. Tente novamente.";
-
-                    _logger.LogWarning("[PJE TRT-{Trt}] CAPTCHA rejeitado: '{Motivo}'.", trtCodigo, mensagemErroAlerta);
-                    erroAnterior = true;
-                }
-                else
-                {
-                    _logger.LogInformation("[PJE TRT-{Trt}] CAPTCHA validado com êxito!", trtCodigo);
+                    _logger.LogInformation("[PJE TRT-{Trt}] CAPTCHA validado com êxito na tentativa {Tentativa}!", trtCodigo, tentativaAtual);
                     break;
                 }
+
+                _logger.LogWarning("[PJE TRT-{Trt}] Tentativa {Tentativa} rejeitada. Aguardando próximo desafio...", trtCodigo, tentativaAtual);
+                await Task.Delay(400, cancellationToken);
             }
 
             if (tentativaAtual >= maxTentativas && await imgCaptcha.IsVisibleAsync())
             {
-                throw new InvalidOperationException("Limite de tentativas de resolução do CAPTCHA excedido.");
+                throw new InvalidOperationException($"Limite de {maxTentativas} tentativas de CAPTCHA excedido.");
             }
         }
         finally
         {
-            _sessionManager.FinalizarSessao(apenasDigitos);
+            _sessionManager.LimparStatusTentativa(apenasDigitos);
         }
 
-        // aguarda renderização do processo ou surgimento do erro pós-consulta/captcha
         await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
-        await Task.Delay(2500, cancellationToken);
+        await Task.Delay(2000, cancellationToken);
 
-        // verificação do painel de erro (#painel-erro) caso o tribunal falhe ao localizar o processo
         var painelErro = page.Locator("#painel-erro").First;
         if (await painelErro.IsVisibleAsync())
         {
             var txtErro = await painelErro.Locator("span").InnerTextAsync();
-            var msgFinal = string.IsNullOrWhiteSpace(txtErro)
-                ? "Ocorreu um erro ao consultar o processo!"
-                : txtErro.Trim();
-
+            var msgFinal = string.IsNullOrWhiteSpace(txtErro) ? "Ocorreu um erro ao consultar o processo!" : txtErro.Trim();
             _logger.LogWarning("[PJE TRT-{Trt}] Processo inexistente (#painel-erro): '{Msg}'", trtCodigo, msgFinal);
             throw new KeyNotFoundException(msgFinal);
         }
@@ -343,7 +317,8 @@ public class PjeTrtScraper : IScraperService
         var processo = new Processo
         {
             NumeroProcesso = numeroProcesso,
-            Tribunal = $"TRT-{int.Parse(trtCodigo)}"
+            Tribunal = $"TRT-{int.Parse(trtCodigo)}",
+            Grau = grauProcesso
         };
 
         var textoTodoCorpo = await page.InnerTextAsync("body");
@@ -357,7 +332,7 @@ public class PjeTrtScraper : IScraperService
 
         if (string.IsNullOrWhiteSpace(processo.Classe))
         {
-            var matchClasseDoc = Regex.Match(textoTodoCorpo, @"\b(?<classe>ATOrd|ATSum|ROT|ACum|ExProvAS|Reclm)\b", RegexOptions.IgnoreCase);
+            var matchClasseDoc = Regex.Match(textoTodoCorpo, @"\b(?<classe>ATOrd|ATSum|ROT|ACum|ExProvAS|Reclm|AP|RO)\b", RegexOptions.IgnoreCase);
             if (matchClasseDoc.Success)
             {
                 processo.Classe = matchClasseDoc.Groups["classe"].Value.ToUpper();
@@ -370,16 +345,40 @@ public class PjeTrtScraper : IScraperService
             processo.Foro = matchOrgaoOrigem.Groups["orgao"].Value.Trim();
         }
 
+        // Fallback: se navegou direto sem tela de escolha, avalia foro e classe
+        bool ehClasseSegundoGrau = Regex.IsMatch(processo.Classe ?? "", @"^(ROT|AP|RO|MSCiv|AR|AIRO)$", RegexOptions.IgnoreCase);
+        bool ehOrgaoSegundoGrau = Regex.IsMatch(processo.Foro ?? "", @"\b(Turma|Pleno|Seção|Gabinete|Tribunal)\b", RegexOptions.IgnoreCase);
+
+        if (ehClasseSegundoGrau || ehOrgaoSegundoGrau)
+        {
+            grauProcesso = 2;
+            processo.Grau = 2;
+        }
+
         var matchAutor = Regex.Match(textoTodoCorpo, @"AUTOR:\s*(?<nome>[^\r\n]+)", RegexOptions.IgnoreCase);
         if (matchAutor.Success)
         {
-            processo.Partes.Add(new ParteProcesso { Tipo = "Autor", Nome = matchAutor.Groups["nome"].Value.Trim() });
+            processo.Partes.Add(new ParteProcesso
+            {
+                Tipo = "Autor",
+                Nome = matchAutor.Groups["nome"].Value.Trim(),
+                ProcessoNumeroProcesso = processo.NumeroProcesso,
+                Tribunal = processo.Tribunal,
+                Grau = processo.Grau
+            });
         }
 
         var matchReu = Regex.Match(textoTodoCorpo, @"RÉU:\s*(?<nome>[^\r\n]+)", RegexOptions.IgnoreCase);
         if (matchReu.Success)
         {
-            processo.Partes.Add(new ParteProcesso { Tipo = "Réu", Nome = matchReu.Groups["nome"].Value.Trim() });
+            processo.Partes.Add(new ParteProcesso
+            {
+                Tipo = "Réu",
+                Nome = matchReu.Groups["nome"].Value.Trim(),
+                ProcessoNumeroProcesso = processo.NumeroProcesso,
+                Tribunal = processo.Tribunal,
+                Grau = processo.Grau
+            });
         }
 
         if (processo.Partes.Count == 0)
@@ -394,14 +393,27 @@ public class PjeTrtScraper : IScraperService
 
                     if (!poloAtivo.Contains("TRT") && !poloPassivo.Contains("TRT") && poloAtivo != poloPassivo)
                     {
-                        processo.Partes.Add(new ParteProcesso { Tipo = "Polo Ativo", Nome = poloAtivo });
-                        processo.Partes.Add(new ParteProcesso { Tipo = "Polo Passivo", Nome = poloPassivo });
+                        processo.Partes.Add(new ParteProcesso
+                        {
+                            Tipo = "Polo Ativo",
+                            Nome = poloAtivo,
+                            ProcessoNumeroProcesso = processo.NumeroProcesso,
+                            Tribunal = processo.Tribunal,
+                            Grau = processo.Grau
+                        });
+
+                        processo.Partes.Add(new ParteProcesso
+                        {
+                            Tipo = "Polo Passivo",
+                            Nome = poloPassivo,
+                            ProcessoNumeroProcesso = processo.NumeroProcesso,
+                            Tribunal = processo.Tribunal,
+                            Grau = processo.Grau
+                        });
                     }
                 }
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         var matchDataDist = Regex.Match(textoTodoCorpo, @"\b(?<data>\d{2}/\d{2}/\d{4}(?:\s+(?:às\s+)?\d{2}:\d{2}(?::\d{2})?)?)\b");
@@ -426,16 +438,15 @@ public class PjeTrtScraper : IScraperService
             processo.Assunto = "Direito do Trabalho / Rescisão do Contrato";
         }
 
-        // extração da última movimentação, alternando para visualização em tabela e iterando 'tr.timeline-row'
         try
         {
             var btnTabela = page.Locator("button[aria-label='Visualizar em Tabela'], button[accesskey='n']").First;
             if (await btnTabela.IsVisibleAsync())
             {
-                _logger.LogInformation("[PJE TRT-{Trt}] Clicando no botão 'Visualizar em Tabela'...", trtCodigo);
+                _logger.LogInformation("[PJE TRT-{Trt}] Clicando em 'Visualizar em Tabela'...", trtCodigo);
                 await btnTabela.ClickAsync();
                 await page.WaitForSelectorAsync("tr.timeline-row", new() { Timeout = 4000 });
-                await Task.Delay(500, cancellationToken);
+                await Task.Delay(400, cancellationToken);
             }
 
             var linhasTabela = await page.Locator("tr.timeline-row").AllAsync();
@@ -489,8 +500,8 @@ public class PjeTrtScraper : IScraperService
             _logger.LogWarning(ex, "[PJE TRT-{Trt}] Falha ao iterar pela tabela de movimentações.", trtCodigo);
         }
 
-        _logger.LogInformation("[PJE TRT-{Trt}] Extração concluída: {Num} | Data Mov: {DataMov} | Movimento: '{Mov}'",
-            trtCodigo, numeroProcesso, processo.DataUltimoAndamento?.ToString("dd/MM/yyyy"), processo.UltimoAndamento);
+        _logger.LogInformation("[PJE TRT-{Trt}] Concluído: {Num} (Grau: {Grau}) | Andamento: '{Mov}'",
+            trtCodigo, numeroProcesso, processo.Grau, processo.UltimoAndamento);
 
         return processo;
     }

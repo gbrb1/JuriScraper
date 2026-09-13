@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 const API_BASE = "http://localhost:5189";
 
@@ -18,6 +18,7 @@ export default function App() {
   const [modoAba, setModoAba] = useState("individual");
   const [numeroInput, setNumeroInput] = useState("");
   const [loteTexto, setLoteTexto] = useState("");
+  const [termoBuscaSalvos, setTermoBuscaSalvos] = useState("");
 
   const [filaLote, setFilaLote] = useState([]);
   const [executandoLote, setExecutandoLote] = useState(false);
@@ -27,38 +28,30 @@ export default function App() {
   const [resultadoAtual, setResultadoAtual] = useState(null);
   const [erro, setErro] = useState(null);
 
+  // Status de feedback do CAPTCHA em tempo real (booleano)
+  const [resolvendoCaptchaIndividual, setResolvendoCaptchaIndividual] =
+    useState(false);
+
   const [opcoesGrau, setOpcoesGrau] = useState([]);
   const [selecionandoGrau, setSelecionandoGrau] = useState(false);
-
-  // CAPTCHA
-  const [captchaImg, setCaptchaImg] = useState(null);
-  const [captchaVersao, setCaptchaVersao] = useState(0);
-  const [avisoErroCaptcha, setAvisoErroCaptcha] = useState(false);
-  const [mensagemErroCaptcha, setMensagemErroCaptcha] = useState("");
-  const [respostaCaptcha, setRespostaCaptcha] = useState("");
-  const [enviandoCaptcha, setEnviandoCaptcha] = useState(false);
 
   const [processosSalvos, setProcessosSalvos] = useState([]);
   const [carregandoLista, setCarregandoLista] = useState(false);
 
-  // animação de Pontinhos (333ms)
   const [pontosLoading, setPontosLoading] = useState("");
 
-  const inputCaptchaRef = useRef(null);
   const abortControllerRef = useRef(null);
   const canceladoManualmenteRef = useRef(false);
+  const consultouGrauRef = useRef(false);
 
   const emProcessamento = carregandoIndividual || executandoLote;
-  // bloqueio das abas: ativo durante scraping, espera de captcha ou escolha de grau
-  const abasBloqueadas =
-    emProcessamento || !!captchaImg || opcoesGrau.length > 0;
+  const abasBloqueadas = emProcessamento || opcoesGrau.length > 0;
   const sessionIdAtual = processoAtualEmExecucao.replace(/\D/g, "");
 
   useEffect(() => {
     carregarProcessosDoBanco();
   }, []);
 
-  // efeito dos 3 pontinhos ciclando a cada 333ms
   useEffect(() => {
     if (!emProcessamento) {
       setPontosLoading("");
@@ -87,9 +80,9 @@ export default function App() {
     }
   };
 
-  const handleExcluirProcesso = async (numeroProcesso, tribunal) => {
+  const handleExcluirProcesso = async (numeroProcesso, tribunal, grau = 1) => {
     const confirmou = window.confirm(
-      `Deseja realmente excluir o processo ${numeroProcesso} (${tribunal}) do banco de dados?`
+      `Deseja realmente excluir o processo ${numeroProcesso} (${tribunal} - ${grau}º Grau) do banco de dados?`
     );
     if (!confirmou) return;
 
@@ -97,7 +90,7 @@ export default function App() {
       const res = await fetch(
         `${API_BASE}/api/Processos/${encodeURIComponent(
           tribunal
-        )}/${encodeURIComponent(numeroProcesso)}`,
+        )}/${grau}/${encodeURIComponent(numeroProcesso)}`,
         {
           method: "DELETE",
         }
@@ -106,7 +99,8 @@ export default function App() {
       if (res.ok) {
         if (
           resultadoAtual?.numeroProcesso === numeroProcesso &&
-          resultadoAtual?.tribunal === tribunal
+          resultadoAtual?.tribunal === tribunal &&
+          (resultadoAtual?.grau || 1) === grau
         ) {
           setResultadoAtual(null);
         }
@@ -122,18 +116,21 @@ export default function App() {
     }
   };
 
-  const handleAtualizarProcesso = async (numeroProcesso, tribunal) => {
+  const handleAtualizarProcesso = async (
+    numeroProcesso,
+    tribunal,
+    grau = 1
+  ) => {
     const confirmou = window.confirm(
-      `Deseja buscar novas informações do processo ${numeroProcesso}? Ele será re-extraído do tribunal para atualizar os dados.`
+      `Deseja buscar novas informações do processo ${numeroProcesso} (${grau}º Grau)? Ele será re-extraído do tribunal para atualizar os dados.`
     );
     if (!confirmou) return;
 
     try {
-      // apaga do banco para garantir que o backend não devolva em cache
       await fetch(
         `${API_BASE}/api/Processos/${encodeURIComponent(
           tribunal
-        )}/${encodeURIComponent(numeroProcesso)}`,
+        )}/${grau}/${encodeURIComponent(numeroProcesso)}`,
         {
           method: "DELETE",
         }
@@ -143,18 +140,17 @@ export default function App() {
       // continua para extrair mesmo se houver falha prévia de delete
     }
 
-    // prepara a UI da aba individual para iniciar o scraping
     setModoAba("individual");
     setNumeroInput(numeroProcesso);
     setResultadoAtual(null);
     setErro(null);
+    setResolvendoCaptchaIndividual(false);
     setCarregandoIndividual(true);
     canceladoManualmenteRef.current = false;
     abortControllerRef.current = new AbortController();
 
     window.scrollTo({ top: 0, behavior: "smooth" });
 
-    // scrapando...
     const resultado = await executarExtracaoProcesso(
       numeroProcesso,
       abortControllerRef.current.signal
@@ -163,7 +159,6 @@ export default function App() {
     if (resultado.sucesso) {
       setResultadoAtual(resultado.dados);
 
-      // salva automaticamente o processo recém-extraído no banco
       try {
         const resSalvar = await fetch(`${API_BASE}/api/Processos/salvar`, {
           method: "POST",
@@ -175,67 +170,96 @@ export default function App() {
           await carregarProcessosDoBanco();
         }
       } catch {
-        // silencia erro caso haja falha temporária de conexão
+        // silencia erro
       }
     } else if (!canceladoManualmenteRef.current) {
       setErro(resultado.erro);
     }
 
     setCarregandoIndividual(false);
+    setResolvendoCaptchaIndividual(false);
     abortControllerRef.current = null;
   };
 
-  // polling unificado para Grau e CAPTCHA
+  // Polling dinâmico do CAPTCHA e seleção de Grau
   useEffect(() => {
-    let intervalId = null;
+    let timerId = null;
+    let cancelado = false;
 
-    if (emProcessamento && sessionIdAtual) {
-      intervalId = setInterval(async () => {
-        try {
-          if (opcoesGrau.length === 0 && !captchaImg) {
-            const resGrau = await fetch(
-              `${API_BASE}/api/Captcha/opcoes-grau/${sessionIdAtual}`
-            );
-            if (resGrau.ok) {
-              const dataGrau = await resGrau.json();
-              if (dataGrau.opcoes && dataGrau.opcoes.length > 0) {
-                setOpcoesGrau(dataGrau.opcoes);
-              }
-            }
-          }
+    const ehTrt = /\.5\.(0?[24]|12|15)\./.test(processoAtualEmExecucao);
 
-          const resCaptcha = await fetch(
-            `${API_BASE}/api/Captcha/${sessionIdAtual}`
+    const executarCicloPolling = async () => {
+      if (cancelado || !emProcessamento || !sessionIdAtual || !ehTrt) return;
+
+      let proximoDelay = 2200;
+
+      try {
+        if (!consultouGrauRef.current && opcoesGrau.length === 0) {
+          const resGrau = await fetch(
+            `${API_BASE}/api/Captcha/opcoes-grau/${sessionIdAtual}`
           );
-          if (resCaptcha.ok) {
-            const dataCaptcha = await resCaptcha.json();
-
-            if (dataCaptcha.versao && dataCaptcha.versao !== captchaVersao) {
-              setCaptchaImg(dataCaptcha.imagem);
-              setCaptchaVersao(dataCaptcha.versao);
-              setAvisoErroCaptcha(dataCaptcha.houveErro || false);
-              setMensagemErroCaptcha(
-                dataCaptcha.mensagemErro ||
-                  "Os caracteres informados estão inválidos. Tente novamente."
-              );
-              setRespostaCaptcha("");
-              setEnviandoCaptcha(false);
-              setTimeout(() => inputCaptchaRef.current?.focus(), 100);
+          if (resGrau.ok) {
+            const dataGrau = await resGrau.json();
+            const lista = dataGrau.opcoes || dataGrau.Opcoes;
+            if (Array.isArray(lista) && lista.length > 0) {
+              setOpcoesGrau(lista);
+              consultouGrauRef.current = true;
             }
           }
-        } catch {}
-      }, 1000);
+        }
+
+        const resStatus = await fetch(
+          `${API_BASE}/api/Captcha/status/${sessionIdAtual}`
+        );
+
+        if (resStatus.status === 200) {
+          const dataStatus = await resStatus.json();
+          const emAndamento = Boolean(dataStatus && dataStatus.tentativa);
+
+          setResolvendoCaptchaIndividual(emAndamento);
+
+          setFilaLote((prev) =>
+            prev.map((item) =>
+              item.numero.replace(/\D/g, "") === sessionIdAtual
+                ? { ...item, resolvendoCaptcha: emAndamento }
+                : item
+            )
+          );
+
+          proximoDelay = 900;
+        } else {
+          setResolvendoCaptchaIndividual(false);
+          setFilaLote((prev) =>
+            prev.map((item) =>
+              item.numero.replace(/\D/g, "") === sessionIdAtual
+                ? { ...item, resolvendoCaptcha: false }
+                : item
+            )
+          );
+          proximoDelay = 2200;
+        }
+      } catch {
+        proximoDelay = 2500;
+      }
+
+      if (!cancelado && emProcessamento) {
+        timerId = setTimeout(executarCicloPolling, proximoDelay);
+      }
+    };
+
+    if (emProcessamento && sessionIdAtual && ehTrt) {
+      timerId = setTimeout(executarCicloPolling, 1800);
     }
 
     return () => {
-      if (intervalId) clearInterval(intervalId);
+      cancelado = true;
+      if (timerId) clearTimeout(timerId);
     };
   }, [
     emProcessamento,
     sessionIdAtual,
     opcoesGrau.length,
-    captchaImg,
-    captchaVersao,
+    processoAtualEmExecucao,
   ]);
 
   const handleCancelarExecucao = async () => {
@@ -262,13 +286,9 @@ export default function App() {
     setCarregandoIndividual(false);
     setExecutandoLote(false);
     setProcessoAtualEmExecucao("");
+    setResolvendoCaptchaIndividual(false);
     setOpcoesGrau([]);
-    setCaptchaImg(null);
-    setCaptchaVersao(0);
-    setAvisoErroCaptcha(false);
-    setMensagemErroCaptcha("");
-    setRespostaCaptcha("");
-    setEnviandoCaptcha(false);
+    consultouGrauRef.current = false;
 
     setFilaLote((prev) =>
       prev.map((item) =>
@@ -277,6 +297,7 @@ export default function App() {
               ...item,
               status: "erro",
               erro: "Operação cancelada pelo usuário.",
+              resolvendoCaptcha: false,
             }
           : item
       )
@@ -289,11 +310,8 @@ export default function App() {
     const numLimpo = numero.trim();
     setProcessoAtualEmExecucao(numLimpo);
     setOpcoesGrau([]);
-    setCaptchaImg(null);
-    setCaptchaVersao(0);
-    setAvisoErroCaptcha(false);
-    setMensagemErroCaptcha("");
-    setRespostaCaptcha("");
+    setResolvendoCaptchaIndividual(false);
+    consultouGrauRef.current = false;
 
     try {
       const res = await fetch(
@@ -328,32 +346,15 @@ export default function App() {
       return { sucesso: false, erro: err.message };
     } finally {
       setOpcoesGrau([]);
-      setCaptchaImg(null);
-      setCaptchaVersao(0);
       setProcessoAtualEmExecucao("");
     }
   };
 
+  // SEMPRE consulta no tribunal ao vivo, sem barrar por existir no banco
   const handleConsultaIndividual = async (e) => {
     if (e) e.preventDefault();
     const numeroLimpo = numeroInput.trim();
     if (!numeroLimpo) return;
-
-    // verifica se já está salvo no banco local
-    const processoJaSalvo = processosSalvos.find(
-      (p) =>
-        p.numeroProcesso.replace(/\D/g, "") === numeroLimpo.replace(/\D/g, "")
-    );
-
-    if (processoJaSalvo) {
-      alert(
-        `O processo ${processoJaSalvo.numeroProcesso} (${processoJaSalvo.tribunal}) ` +
-          `já está salvo no sistema. Caso queira buscar dados novos diretamente no tribunal, ` +
-          `utilize o botão de atualizar (🔄) na listagem abaixo.`
-      );
-      setResultadoAtual(processoJaSalvo);
-      return;
-    }
 
     canceladoManualmenteRef.current = false;
     abortControllerRef.current = new AbortController();
@@ -361,6 +362,7 @@ export default function App() {
     setCarregandoIndividual(true);
     setResultadoAtual(null);
     setErro(null);
+    setResolvendoCaptchaIndividual(false);
 
     const resultado = await executarExtracaoProcesso(
       numeroLimpo,
@@ -374,6 +376,7 @@ export default function App() {
     }
 
     setCarregandoIndividual(false);
+    setResolvendoCaptchaIndividual(false);
     abortControllerRef.current = null;
   };
 
@@ -392,6 +395,7 @@ export default function App() {
     const itensIniciais = linhas.map((num) => ({
       numero: num,
       status: "pendente",
+      resolvendoCaptcha: false,
       erro: null,
       dados: null,
     }));
@@ -407,7 +411,9 @@ export default function App() {
 
       setFilaLote((prev) =>
         prev.map((item, idx) =>
-          idx === i ? { ...item, status: "executando" } : item
+          idx === i
+            ? { ...item, status: "executando", resolvendoCaptcha: false }
+            : item
         )
       );
 
@@ -422,8 +428,18 @@ export default function App() {
         prev.map((item, idx) => {
           if (idx === i) {
             return resultado.sucesso
-              ? { ...item, status: "sucesso", dados: resultado.dados }
-              : { ...item, status: "erro", erro: resultado.erro };
+              ? {
+                  ...item,
+                  status: "sucesso",
+                  dados: resultado.dados,
+                  resolvendoCaptcha: false,
+                }
+              : {
+                  ...item,
+                  status: "erro",
+                  erro: resultado.erro,
+                  resolvendoCaptcha: false,
+                };
           }
           return item;
         })
@@ -463,28 +479,57 @@ export default function App() {
     }
   };
 
-  const handleEnviarCaptcha = async (e) => {
-    e.preventDefault();
-    if (!respostaCaptcha.trim() || enviandoCaptcha) return;
+  // avalia se o processo não existe no banco OU se possui dados diferentes
+  const temAlteracaoParaSalvar = useMemo(() => {
+    if (!resultadoAtual) return false;
 
-    setEnviandoCaptcha(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/Captcha/${sessionIdAtual}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto: respostaCaptcha.trim() }),
-      });
+    const noBanco = processosSalvos.find(
+      (p) =>
+        p.numeroProcesso === resultadoAtual.numeroProcesso &&
+        p.tribunal === resultadoAtual.tribunal &&
+        (p.grau || 1) === (resultadoAtual.grau || 1)
+    );
 
-      if (!res.ok) {
-        const data = await res.json();
-        setEnviandoCaptcha(false);
-        throw new Error(data.mensagem || "Erro ao enviar resposta do CAPTCHA.");
-      }
-    } catch (err) {
-      setEnviandoCaptcha(false);
-      alert(`Erro: ${err.message}`);
-    }
-  };
+    if (!noBanco) return true;
+
+    const dataBanco = noBanco.dataUltimoAndamento
+      ? new Date(noBanco.dataUltimoAndamento).getTime()
+      : null;
+    const dataAtual = resultadoAtual.dataUltimoAndamento
+      ? new Date(resultadoAtual.dataUltimoAndamento).getTime()
+      : null;
+
+    const mudouAndamento =
+      (noBanco.ultimoAndamento || "").trim() !==
+      (resultadoAtual.ultimoAndamento || "").trim();
+    const mudouData = dataBanco !== dataAtual;
+    const mudouClasse =
+      (noBanco.classe || "") !== (resultadoAtual.classe || "");
+    const mudouForo = (noBanco.foro || "") !== (resultadoAtual.foro || "");
+
+    return mudouAndamento || mudouData || mudouClasse || mudouForo;
+  }, [resultadoAtual, processosSalvos]);
+
+  // filtro de Processos Salvos pela Search Box
+  const processosSalvosFiltrados = useMemo(() => {
+    if (!termoBuscaSalvos.trim()) return processosSalvos;
+    const termo = termoBuscaSalvos.toLowerCase().trim();
+    const termoApenasDigitos = termo.replace(/\D/g, "");
+
+    return processosSalvos.filter((p) => {
+      const matchTexto =
+        p.numeroProcesso.toLowerCase().includes(termo) ||
+        p.tribunal.toLowerCase().includes(termo) ||
+        (p.foro && p.foro.toLowerCase().includes(termo)) ||
+        (p.classe && p.classe.toLowerCase().includes(termo));
+
+      const matchDigitos =
+        termoApenasDigitos.length > 0 &&
+        p.numeroProcesso.replace(/\D/g, "").includes(termoApenasDigitos);
+
+      return matchTexto || matchDigitos;
+    });
+  }, [processosSalvos, termoBuscaSalvos]);
 
   const totalLote = filaLote.length;
   const concluidosLote = filaLote.filter(
@@ -556,7 +601,6 @@ export default function App() {
               Powered by
             </span>
 
-            {/* .NET */}
             <a
               href="https://dotnet.microsoft.com/"
               target="_blank"
@@ -584,7 +628,6 @@ export default function App() {
               />
             </a>
 
-            {/* Playwright */}
             <a
               href="https://playwright.dev/"
               target="_blank"
@@ -611,8 +654,32 @@ export default function App() {
                 style={{ width: 26, height: 26 }}
               />
             </a>
-
-            {/* React */}
+            <a
+              href="https://github.com/decryptr/captcha"
+              target="_blank"
+              rel="noreferrer"
+              title="decryptr/captcha"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                transition: "transform 0.2s, opacity 0.2s",
+                opacity: 0.85,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "scale(1.15)";
+                e.currentTarget.style.opacity = "1";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "scale(1)";
+                e.currentTarget.style.opacity = "0.85";
+              }}
+            >
+              <img
+                src="https://raw.githubusercontent.com/decryptr/captcha/refs/heads/master/man/figures/hex_small.png"
+                alt="decryptr/captcha"
+                style={{ width: 26, height: 26 }}
+              />
+            </a>
             <a
               href="https://react.dev/"
               target="_blank"
@@ -640,7 +707,6 @@ export default function App() {
               />
             </a>
 
-            {/* PostgreSQL */}
             <a
               href="https://www.postgresql.org/"
               target="_blank"
@@ -815,18 +881,49 @@ export default function App() {
                     color: "#60a5fa",
                     fontSize: 14,
                     textAlign: "center",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 6,
                   }}
                 >
-                  ⏳ <strong>Extraindo dados</strong>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: 24,
-                      textAlign: "left",
-                    }}
-                  >
-                    {pontosLoading}
-                  </span>
+                  <div>
+                    ⏳ <strong>Extraindo dados</strong>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: 24,
+                        textAlign: "left",
+                      }}
+                    >
+                      {pontosLoading}
+                    </span>
+                  </div>
+
+                  {resolvendoCaptchaIndividual && (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#f59e0b",
+                        fontWeight: 600,
+                        background: "rgba(245, 158, 11, 0.15)",
+                        padding: "4px 12px",
+                        borderRadius: 6,
+                        border: "1px solid rgba(245, 158, 11, 0.3)",
+                      }}
+                    >
+                      ⚠️ Resolvendo CAPTCHA
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: 24,
+                          textAlign: "left",
+                        }}
+                      >
+                        {pontosLoading}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -885,6 +982,7 @@ export default function App() {
                       setCarregandoIndividual(true);
                       setResultadoAtual(null);
                       setErro(null);
+                      setResolvendoCaptchaIndividual(false);
                       canceladoManualmenteRef.current = false;
                       abortControllerRef.current = new AbortController();
                       executarExtracaoProcesso(
@@ -897,6 +995,7 @@ export default function App() {
                           setErro(res.erro);
                         }
                         setCarregandoIndividual(false);
+                        setResolvendoCaptchaIndividual(false);
                         abortControllerRef.current = null;
                       });
                     }}
@@ -1134,23 +1233,115 @@ export default function App() {
                           <span style={{ color: "#94a3b8" }}>⏳ Na fila</span>
                         )}
                         {item.status === "executando" && (
-                          <span
-                            style={{ color: "#60a5fa", fontWeight: "bold" }}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
                           >
-                            🔄 Extraindo
                             <span
-                              style={{
-                                display: "inline-block",
-                                width: 18,
-                                textAlign: "left",
-                              }}
+                              style={{ color: "#60a5fa", fontWeight: "bold" }}
                             >
-                              {pontosLoading}
+                              🔄 Extraindo
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  width: 18,
+                                  textAlign: "left",
+                                }}
+                              >
+                                {pontosLoading}
+                              </span>
                             </span>
-                          </span>
+
+                            {item.resolvendoCaptcha && (
+                              <span
+                                style={{
+                                  color: "#f59e0b",
+                                  fontWeight: 600,
+                                  fontSize: 12,
+                                  background: "rgba(245, 158, 11, 0.15)",
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                                }}
+                              >
+                                ⚠️ Resolvendo CAPTCHA
+                                <span
+                                  style={{
+                                    display: "inline-block",
+                                    width: 18,
+                                    textAlign: "left",
+                                  }}
+                                >
+                                  {pontosLoading}
+                                </span>
+                              </span>
+                            )}
+                          </div>
                         )}
                         {item.status === "sucesso" && (
                           <>
+                            {temAlteracaoParaSalvar ? (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const res = await fetch(
+                                      `${API_BASE}/api/Processos/salvar`,
+                                      {
+                                        method: "POST",
+                                        headers: {
+                                          "Content-Type": "application/json",
+                                        },
+                                        body: JSON.stringify(resultadoAtual),
+                                      }
+                                    );
+                                    if (res.ok) {
+                                      await carregarProcessosDoBanco();
+                                      alert("Processo salvo com sucesso!");
+                                    } else {
+                                      alert(
+                                        "Erro ao salvar processo no banco."
+                                      );
+                                    }
+                                  } catch {
+                                    alert(
+                                      "Erro de conexão ao salvar processo."
+                                    );
+                                  }
+                                }}
+                                title="Salvar no Banco de Dados"
+                                style={{
+                                  background: "#1e293b",
+                                  border: "1px solid #475569",
+                                  color: "#4ade80",
+                                  padding: "6px 12px",
+                                  borderRadius: 8,
+                                  cursor: "pointer",
+                                  fontWeight: "bold",
+                                  fontSize: 14,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                }}
+                              >
+                                💾
+                              </button>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  color: "#94a3b8",
+                                  background: "#1e293b",
+                                  padding: "6px 12px",
+                                  borderRadius: 8,
+                                  border: "1px solid #334155",
+                                }}
+                              >
+                                ✓ Sincronizado
+                              </span>
+                            )}
                             <span
                               style={{ color: "#4ade80", fontWeight: "bold" }}
                             >
@@ -1195,7 +1386,7 @@ export default function App() {
           </div>
         )}
 
-        {/* MODAIS INDIVIDUAIS: Renderizam apenas quando na aba 'individual' */}
+        {/* Modal de Instâncias Múltiplas */}
         {opcoesGrau.length > 0 && (
           <div
             style={{
@@ -1229,23 +1420,6 @@ export default function App() {
                   O tribunal localizou este processo em mais de uma instância.
                 </p>
               </div>
-
-              {/* <button
-                type="button"
-                onClick={handleCancelarExecucao}
-                style={{
-                  padding: "6px 14px",
-                  background: "#dc2626",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 6,
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  fontSize: 12,
-                }}
-              >
-                ⛔ Cancelar
-              </button> */}
             </div>
 
             <div
@@ -1258,8 +1432,10 @@ export default function App() {
             >
               {opcoesGrau.map((opcao) => (
                 <button
-                  key={opcao.indice}
-                  onClick={() => handleSelecionarGrau(opcao.indice)}
+                  key={opcao.indice ?? opcao.Indice}
+                  onClick={() =>
+                    handleSelecionarGrau(opcao.indice ?? opcao.Indice)
+                  }
                   disabled={selecionandoGrau}
                   style={{
                     padding: "12px 20px",
@@ -1272,155 +1448,14 @@ export default function App() {
                     cursor: selecionandoGrau ? "not-allowed" : "pointer",
                   }}
                 >
-                  {opcao.texto}
+                  {opcao.texto ?? opcao.Texto}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {captchaImg && (
-          <div
-            style={{
-              background: "rgba(120, 53, 15, 0.3)",
-              border: "1px solid #f59e0b",
-              borderRadius: 12,
-              padding: 20,
-              marginBottom: 24,
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
-              }}
-            >
-              <style>
-                {`
-                  @keyframes piscarCaptcha {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0; }
-                  }
-                `}
-              </style>
-
-              <h3
-                style={{
-                  margin: 0,
-                  color: "#fbbf24",
-                  fontSize: 20,
-                  textAlign: "center",
-                  paddingBottom: 15,
-                  flex: 1,
-                  animation: "piscarCaptcha 1s infinite",
-                }}
-              >
-                ⚠️ CAPTCHA DETECTADO
-              </h3>
-              {/* <button
-                type="button"
-                onClick={handleCancelarExecucao}
-                style={{
-                  padding: "6px 14px",
-                  background: "#dc2626",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 6,
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  fontSize: 12,
-                }}
-              >
-                ⛔ Cancelar
-              </button> */}
-            </div>
-
-            {avisoErroCaptcha && (
-              <div
-                style={{
-                  color: "#f87171",
-                  marginBottom: 14,
-                  fontWeight: "600",
-                }}
-              >
-                ⚠️ {mensagemErroCaptcha}
-              </div>
-            )}
-
-            {/* <p style={{ margin: "0 0 16px 0", fontSize: 14, color: "#fde68a" }}>
-              <strong>Digite os caracteres exibidos:</strong>.
-            </p> */}
-
-            <form
-              onSubmit={handleEnviarCaptcha}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 14,
-              }}
-            >
-              <div style={{ background: "#fff", padding: 8, borderRadius: 8 }}>
-                <img
-                  src={captchaImg}
-                  alt="Desafio CAPTCHA"
-                  style={{ display: "block" }}
-                />
-              </div>
-
-              <input
-                ref={inputCaptchaRef}
-                type="text"
-                placeholder="Digite aqui"
-                value={respostaCaptcha}
-                onChange={(e) => setRespostaCaptcha(e.target.value)}
-                maxLength={10}
-                autoComplete="off"
-                disabled={enviandoCaptcha}
-                style={{
-                  padding: "10px 14px",
-                  fontSize: 20,
-                  textAlign: "center",
-                  letterSpacing: 4,
-                  width: 200,
-                  background: "#1e293b",
-                  border: avisoErroCaptcha
-                    ? "2px solid #ef4444"
-                    : "2px solid #f59e0b",
-                  borderRadius: 8,
-                  color: "#fff",
-                  fontWeight: "bold",
-                  cursor: enviandoCaptcha ? "not-allowed" : "text",
-                  opacity: enviandoCaptcha ? 0.6 : 1,
-                }}
-              />
-
-              <button
-                type="submit"
-                disabled={enviandoCaptcha || !respostaCaptcha.trim()}
-                style={{
-                  padding: "10px 28px",
-                  background: enviandoCaptcha ? "#475569" : "#16a34a",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 8,
-                  fontWeight: "bold",
-                  fontSize: 14,
-                  cursor:
-                    enviandoCaptcha || !respostaCaptcha.trim()
-                      ? "not-allowed"
-                      : "pointer",
-                }}
-              >
-                {enviandoCaptcha ? "Validando no tribunal..." : "Confirmar"}
-              </button>
-            </form>
-          </div>
-        )}
-
+        {/* Card de Detalhe com Botão Salvar Condicional */}
         {modoAba === "individual" && resultadoAtual && (
           <div
             style={{
@@ -1485,12 +1520,29 @@ export default function App() {
                   {resultadoAtual.tribunal}
                 </span>
 
-                {/* Só exibe o botão Salvar se o processo ainda NÃO estiver gravado no banco */}
-                {!processosSalvos.some(
-                  (p) =>
-                    p.numeroProcesso === resultadoAtual.numeroProcesso &&
-                    p.tribunal === resultadoAtual.tribunal
-                ) && (
+                <span
+                  style={{
+                    background:
+                      (resultadoAtual.grau || 1) === 2
+                        ? "rgba(168, 85, 247, 0.2)"
+                        : "rgba(59, 130, 246, 0.2)",
+                    color:
+                      (resultadoAtual.grau || 1) === 2 ? "#d8b4fe" : "#93c5fd",
+                    padding: "6px 12px",
+                    borderRadius: 20,
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    border:
+                      (resultadoAtual.grau || 1) === 2
+                        ? "1px solid rgba(168, 85, 247, 0.4)"
+                        : "1px solid rgba(59, 130, 246, 0.4)",
+                  }}
+                >
+                  {resultadoAtual.grau || 1}º Grau
+                </span>
+
+                {/* SÓ MOSTRA O BOTÃO SALVAR SE HOUVER ALTERAÇÃO OU SE FOR NOVO */}
+                {temAlteracaoParaSalvar ? (
                   <button
                     onClick={async () => {
                       try {
@@ -1529,6 +1581,19 @@ export default function App() {
                   >
                     💾 Salvar
                   </button>
+                ) : (
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "#94a3b8",
+                      background: "#1e293b",
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #334155",
+                    }}
+                  >
+                    ✓ Sincronizado
+                  </span>
                 )}
 
                 <button
@@ -1696,6 +1761,7 @@ export default function App() {
           </div>
         )}
 
+        {/* Tabela de Processos Salvos com Search Box Própria */}
         <div
           style={{
             background: "rgba(17, 24, 39, 0.8)",
@@ -1712,14 +1778,34 @@ export default function App() {
               justifyContent: "space-between",
               alignItems: "center",
               marginBottom: 16,
+              flexWrap: "wrap",
+              gap: 12,
             }}
           >
             <h3 style={{ margin: 0, fontSize: 16, color: "#f8fafc" }}>
-              Processos Salvos
+              Processos Salvos ({processosSalvosFiltrados.length})
             </h3>
+
+            {/* SEARCH BOX DO BANCO LOCAL */}
+            <input
+              type="text"
+              placeholder="Buscar nos processos salvos..."
+              value={termoBuscaSalvos}
+              onChange={(e) => setTermoBuscaSalvos(e.target.value)}
+              style={{
+                padding: "8px 14px",
+                fontSize: 13,
+                background: "#1e293b",
+                border: "1px solid #334155",
+                borderRadius: 6,
+                color: "#f8fafc",
+                width: 280,
+                outline: "none",
+              }}
+            />
           </div>
 
-          {processosSalvos.length === 0 ? (
+          {processosSalvosFiltrados.length === 0 ? (
             <p
               style={{
                 margin: 0,
@@ -1729,7 +1815,9 @@ export default function App() {
                 padding: 20,
               }}
             >
-              Nenhum processo salvo no banco até o momento.
+              {processosSalvos.length === 0
+                ? "Nenhum processo salvo no banco até o momento."
+                : "Nenhum processo salvo encontrado para esta busca."}
             </p>
           ) : (
             <div style={{ overflowX: "auto" }}>
@@ -1750,6 +1838,7 @@ export default function App() {
                     }}
                   >
                     <th style={{ padding: 12 }}>Tribunal</th>
+                    <th style={{ padding: 12 }}>Instância</th>
                     <th style={{ padding: 12 }}>Número</th>
                     <th style={{ padding: 12 }}>Classe</th>
                     <th style={{ padding: 12 }}>Foro</th>
@@ -1758,104 +1847,134 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {processosSalvos.map((proc, index) => (
-                    <tr
-                      key={index}
-                      style={{ borderBottom: "1px solid #1f2937" }}
-                    >
-                      <td
-                        style={{
-                          padding: 12,
-                          fontWeight: 600,
-                          color: "#60a5fa",
-                        }}
-                      >
-                        {proc.tribunal}
-                      </td>
-                      <td style={{ padding: 12, fontFamily: "monospace" }}>
-                        {proc.numeroProcesso}
-                      </td>
-                      <td style={{ padding: 12 }}>{proc.classe || "-"}</td>
-                      <td style={{ padding: 12 }}>{proc.foro || "-"}</td>
-                      <td style={{ padding: 12 }}>
-                        {proc.dataDistribuicao
-                          ? new Date(proc.dataDistribuicao).toLocaleDateString(
-                              "pt-BR"
-                            )
-                          : "-"}
-                      </td>
-                      <td
-                        style={{
-                          padding: 12,
-                          display: "flex",
-                          justifyContent: "center",
-                          gap: 8,
-                        }}
-                      >
-                        <button
-                          onClick={() => {
-                            setResultadoAtual(proc);
-                            setModoAba("individual");
-                            window.scrollTo({ top: 120, behavior: "smooth" });
-                          }}
-                          style={{
-                            padding: "4px 10px",
-                            background: "#1e293b",
-                            border: "1px solid #475569",
-                            color: "#93c5fd",
-                            borderRadius: 4,
-                            fontSize: 11,
-                            cursor: "pointer",
-                          }}
-                        >
-                          Ver Detalhes
-                        </button>
+                  {processosSalvosFiltrados.map((proc) => {
+                    const grauInt = proc.grau || 1;
+                    const chaveUnica = `${proc.numeroProcesso}-${proc.tribunal}-${grauInt}`;
 
-                        <button
-                          onClick={() =>
-                            handleAtualizarProcesso(
-                              proc.numeroProcesso,
-                              proc.tribunal
-                            )
-                          }
-                          disabled={abasBloqueadas}
-                          title="Buscar novas informações no tribunal"
+                    return (
+                      <tr
+                        key={chaveUnica}
+                        style={{ borderBottom: "1px solid #1f2937" }}
+                      >
+                        <td
                           style={{
-                            padding: "4px 8px",
-                            background: "rgba(59, 130, 246, 0.15)",
-                            border: "1px solid rgba(59, 130, 246, 0.4)",
+                            padding: 12,
+                            fontWeight: 600,
                             color: "#60a5fa",
-                            borderRadius: 4,
-                            fontSize: 12,
-                            cursor: abasBloqueadas ? "not-allowed" : "pointer",
                           }}
                         >
-                          🔄
-                        </button>
-
-                        <button
-                          onClick={() =>
-                            handleExcluirProcesso(
-                              proc.numeroProcesso,
-                              proc.tribunal
-                            )
-                          }
-                          title="Excluir do Banco de Dados"
+                          {proc.tribunal}
+                        </td>
+                        <td style={{ padding: 12 }}>
+                          <span
+                            style={{
+                              background:
+                                grauInt === 2
+                                  ? "rgba(168, 85, 247, 0.2)"
+                                  : "rgba(59, 130, 246, 0.2)",
+                              color: grauInt === 2 ? "#d8b4fe" : "#93c5fd",
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              border:
+                                grauInt === 2
+                                  ? "1px solid rgba(168, 85, 247, 0.4)"
+                                  : "1px solid rgba(59, 130, 246, 0.4)",
+                            }}
+                          >
+                            {grauInt}º Grau
+                          </span>
+                        </td>
+                        <td style={{ padding: 12, fontFamily: "monospace" }}>
+                          {proc.numeroProcesso}
+                        </td>
+                        <td style={{ padding: 12 }}>{proc.classe || "-"}</td>
+                        <td style={{ padding: 12 }}>{proc.foro || "-"}</td>
+                        <td style={{ padding: 12 }}>
+                          {proc.dataDistribuicao
+                            ? new Date(
+                                proc.dataDistribuicao
+                              ).toLocaleDateString("pt-BR")
+                            : "-"}
+                        </td>
+                        <td
                           style={{
-                            padding: "4px 8px",
-                            background: "rgba(220, 38, 38, 0.15)",
-                            border: "1px solid rgba(239, 68, 68, 0.4)",
-                            color: "#f87171",
-                            borderRadius: 4,
-                            fontSize: 12,
-                            cursor: "pointer",
+                            padding: 12,
+                            display: "flex",
+                            justifyContent: "center",
+                            gap: 8,
                           }}
                         >
-                          🗑️
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                          <button
+                            onClick={() => {
+                              setResultadoAtual(proc);
+                              setModoAba("individual");
+                              window.scrollTo({ top: 120, behavior: "smooth" });
+                            }}
+                            style={{
+                              padding: "4px 10px",
+                              background: "#1e293b",
+                              border: "1px solid #475569",
+                              color: "#93c5fd",
+                              borderRadius: 4,
+                              fontSize: 11,
+                              cursor: "pointer",
+                            }}
+                          >
+                            Ver Detalhes
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              handleAtualizarProcesso(
+                                proc.numeroProcesso,
+                                proc.tribunal,
+                                grauInt
+                              )
+                            }
+                            disabled={abasBloqueadas}
+                            title="Buscar novas informações no tribunal"
+                            style={{
+                              padding: "4px 8px",
+                              background: "rgba(59, 130, 246, 0.15)",
+                              border: "1px solid rgba(59, 130, 246, 0.4)",
+                              color: "#60a5fa",
+                              borderRadius: 4,
+                              fontSize: 12,
+                              cursor: abasBloqueadas
+                                ? "not-allowed"
+                                : "pointer",
+                            }}
+                          >
+                            🔄
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              handleExcluirProcesso(
+                                proc.numeroProcesso,
+                                proc.tribunal,
+                                grauInt
+                              )
+                            }
+                            title="Excluir do Banco de Dados"
+                            style={{
+                              padding: "4px 8px",
+                              background: "rgba(220, 38, 38, 0.15)",
+                              border: "1px solid rgba(239, 68, 68, 0.4)",
+                              color: "#f87171",
+                              borderRadius: 4,
+                              fontSize: 12,
+                              cursor: "pointer",
+                            }}
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

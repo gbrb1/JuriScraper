@@ -22,7 +22,7 @@ public class TjspScraper : IScraperService
             Headless = true
         });
 
-        // fecha o navegador se o usuário cancelar no front
+        // Fecha o navegador se a requisição for abortada pelo cliente
         using var registration = cancellationToken.Register(async () =>
         {
             try
@@ -32,7 +32,12 @@ public class TjspScraper : IScraperService
             catch { }
         });
 
-        var context = await browser.NewContextAsync();
+        await using var context = await browser.NewContextAsync(new()
+        {
+            UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            Locale = "pt-BR"
+        });
+
         var page = await context.NewPageAsync();
 
         var apenasDigitos = Regex.Replace(numeroProcesso, @"\D", "");
@@ -71,13 +76,22 @@ public class TjspScraper : IScraperService
         if (await pageResult.Locator("#mensagemRetorno").IsVisibleAsync())
         {
             var msg = (await pageResult.Locator("#mensagemRetorno").InnerTextAsync()).Trim();
-            throw new Exception($"TJSP: {msg}");
+            throw new KeyNotFoundException($"TJSP: {msg}");
+        }
+
+        // Se o TJSP retornar uma lista de múltiplos resultados (ex: incidentes), acessa o primeiro link válido
+        var linkPrimeiroResultado = pageResult.Locator("#tabelaResultadoSelecao tr td a.linkProcesso").First;
+        if (await linkPrimeiroResultado.IsVisibleAsync())
+        {
+            await linkPrimeiroResultado.ClickAsync();
+            await pageResult.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
         }
 
         var processo = new Processo
         {
             NumeroProcesso = numeroProcesso,
             Tribunal = "TJ-SP",
+            Grau = 1,
             Classe = await ObterTextoAsync(pageResult, "#classeProcesso"),
             Assunto = await ObterTextoAsync(pageResult, "#assuntoProcesso"),
             Foro = await ObterTextoAsync(pageResult, "#foroProcesso")
@@ -128,7 +142,10 @@ public class TjspScraper : IScraperService
             processo.Partes.Add(new ParteProcesso
             {
                 Tipo = string.IsNullOrWhiteSpace(tipoBruto) ? "Parte" : tipoBruto,
-                Nome = nomePrincipal
+                Nome = nomePrincipal,
+                ProcessoNumeroProcesso = processo.NumeroProcesso,
+                Tribunal = processo.Tribunal,
+                Grau = processo.Grau
             });
 
             for (int i = 1; i < linhasTexto.Count; i++)
@@ -141,7 +158,10 @@ public class TjspScraper : IScraperService
                     processo.Partes.Add(new ParteProcesso
                     {
                         Tipo = matchAdv.Groups[1].Value.Trim(),
-                        Nome = matchAdv.Groups[2].Value.Trim()
+                        Nome = matchAdv.Groups[2].Value.Trim(),
+                        ProcessoNumeroProcesso = processo.NumeroProcesso,
+                        Tribunal = processo.Tribunal,
+                        Grau = processo.Grau
                     });
                 }
             }
@@ -153,7 +173,7 @@ public class TjspScraper : IScraperService
             if (await btnExibir.IsVisibleAsync())
             {
                 await btnExibir.ClickAsync();
-                await Task.Delay(600, cancellationToken);
+                await Task.Delay(400, cancellationToken);
             }
 
             var linhaMov = pageResult.Locator("#tabelaPrimeiraPaginaMovimentacoes tr.containerMovimentacao, #tabelaTodasMovimentacoes tr.containerMovimentacao, #containerMovimentacoes tr.containerMovimentacao, tr.containerMovimentacao").First;
@@ -181,9 +201,7 @@ public class TjspScraper : IScraperService
                 processo.UltimoAndamento = Regex.Replace(txtDesc, @"\s+", " ").Trim();
             }
         }
-        catch
-        {
-        }
+        catch { }
 
         if (string.IsNullOrWhiteSpace(processo.UltimoAndamento))
         {

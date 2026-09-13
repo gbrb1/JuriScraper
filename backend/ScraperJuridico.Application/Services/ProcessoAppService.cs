@@ -46,8 +46,6 @@ public class ProcessoAppService : IProcessoAppService
         try
         {
             var scraper = _scraperFactory.ObterScraper(numeroLimpo);
-
-            // repassando o CancellationToken para o scraper
             var processoColetado = await scraper.ExtrairProcessoAsync(numeroLimpo, cancellationToken);
 
             if (processoColetado is null)
@@ -59,7 +57,6 @@ public class ProcessoAppService : IProcessoAppService
                 );
             }
 
-
             return new ResultadoColetaDto(
                 NumeroProcesso: numeroLimpo,
                 Sucesso: true,
@@ -69,7 +66,6 @@ public class ProcessoAppService : IProcessoAppService
         }
         catch (OperationCanceledException)
         {
-            //tratamento específico para quando o usuário cancela a execução
             return new ResultadoColetaDto(
                 NumeroProcesso: numeroLimpo,
                 Sucesso: false,
@@ -100,33 +96,30 @@ public class ProcessoAppService : IProcessoAppService
         {
             NumeroProcesso = processoDto.NumeroProcesso,
             Tribunal = processoDto.Tribunal,
+            Grau = processoDto.Grau,
             Classe = processoDto.Classe,
             Assunto = processoDto.Assunto,
             Foro = processoDto.Foro,
             DataDistribuicao = processoDto.DataDistribuicao,
             UltimoAndamento = processoDto.UltimoAndamento,
             DataUltimoAndamento = processoDto.DataUltimoAndamento,
-            Partes = processoDto.Partes?.Select(p => new ParteProcesso { Tipo = p.Tipo, Nome = p.Nome }).ToList() ?? new()
+            Partes = processoDto.Partes?.Select(p => new ParteProcesso
+            {
+                Tipo = p.Tipo,
+                Nome = p.Nome,
+                ProcessoNumeroProcesso = processoDto.NumeroProcesso,
+                Tribunal = processoDto.Tribunal,
+                Grau = processoDto.Grau
+            }).ToList() ?? new()
         };
 
         await _repository.SalvarOuAtualizarAsync(processoEntity);
         return MapearParaDto(processoEntity);
     }
 
-    public async Task<IEnumerable<ResultadoColetaDto>> ColetarEArmazenarProcessosAsync(IEnumerable<string> numerosProcessos, CancellationToken cancellationToken = default)
+    public async Task<bool> ExcluirProcessoAsync(string numeroProcesso, string tribunal, int grau)
     {
-        var resultados = new List<ResultadoColetaDto>();
-
-        foreach (var numero in numerosProcessos)
-        {
-            //interrompe loop do lote se o usuário cancelar
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var resultado = await ColetarApenasAsync(numero, cancellationToken);
-            resultados.Add(resultado);
-        }
-
-        return resultados;
+        return await _repository.ExcluirAsync(numeroProcesso, tribunal, grau);
     }
 
     private static ProcessoDto MapearParaDto(Processo processo)
@@ -134,6 +127,7 @@ public class ProcessoAppService : IProcessoAppService
         return new ProcessoDto(
             NumeroProcesso: processo.NumeroProcesso,
             Tribunal: processo.Tribunal,
+            Grau: processo.Grau,
             Classe: processo.Classe,
             Assunto: processo.Assunto,
             Foro: processo.Foro,
@@ -142,9 +136,5 @@ public class ProcessoAppService : IProcessoAppService
             DataUltimoAndamento: processo.DataUltimoAndamento,
             Partes: processo.Partes.Select(p => new ParteDto(p.Tipo, p.Nome)).ToList()
         );
-    }
-    public async Task<bool> ExcluirProcessoAsync(string numeroProcesso, string tribunal)
-    {
-        return await _repository.ExcluirAsync(numeroProcesso, tribunal);
     }
 }

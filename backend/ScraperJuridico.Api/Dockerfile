@@ -30,6 +30,7 @@ WORKDIR /app
 
 # dependências necessárias para o chromium
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
