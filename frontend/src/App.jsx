@@ -25,7 +25,11 @@ export default function App() {
 
   const [processoAtualEmExecucao, setProcessoAtualEmExecucao] = useState("");
   const [carregandoIndividual, setCarregandoIndividual] = useState(false);
-  const [resultadoAtual, setResultadoAtual] = useState(null);
+
+  // Painéis de detalhes exclusivos para cada aba
+  const [resultadoIndividual, setResultadoIndividual] = useState(null);
+  const [resultadoLote, setResultadoLote] = useState(null);
+
   const [erro, setErro] = useState(null);
 
   // Status de feedback do CAPTCHA em tempo real (booleano)
@@ -98,11 +102,18 @@ export default function App() {
 
       if (res.ok) {
         if (
-          resultadoAtual?.numeroProcesso === numeroProcesso &&
-          resultadoAtual?.tribunal === tribunal &&
-          (resultadoAtual?.grau || 1) === grau
+          resultadoIndividual?.numeroProcesso === numeroProcesso &&
+          resultadoIndividual?.tribunal === tribunal &&
+          (resultadoIndividual?.grau || 1) === grau
         ) {
-          setResultadoAtual(null);
+          setResultadoIndividual(null);
+        }
+        if (
+          resultadoLote?.numeroProcesso === numeroProcesso &&
+          resultadoLote?.tribunal === tribunal &&
+          (resultadoLote?.grau || 1) === grau
+        ) {
+          setResultadoLote(null);
         }
         await carregarProcessosDoBanco();
       } else {
@@ -142,7 +153,7 @@ export default function App() {
 
     setModoAba("individual");
     setNumeroInput(numeroProcesso);
-    setResultadoAtual(null);
+    setResultadoIndividual(null);
     setErro(null);
     setResolvendoCaptchaIndividual(false);
     setCarregandoIndividual(true);
@@ -157,7 +168,7 @@ export default function App() {
     );
 
     if (resultado.sucesso) {
-      setResultadoAtual(resultado.dados);
+      setResultadoIndividual(resultado.dados);
 
       try {
         const resSalvar = await fetch(`${API_BASE}/api/Processos/salvar`, {
@@ -360,7 +371,7 @@ export default function App() {
     abortControllerRef.current = new AbortController();
 
     setCarregandoIndividual(true);
-    setResultadoAtual(null);
+    setResultadoIndividual(null);
     setErro(null);
     setResolvendoCaptchaIndividual(false);
 
@@ -370,7 +381,7 @@ export default function App() {
     );
 
     if (resultado.sucesso) {
-      setResultadoAtual(resultado.dados);
+      setResultadoIndividual(resultado.dados);
     } else if (!canceladoManualmenteRef.current) {
       setErro(resultado.erro);
     }
@@ -407,6 +418,9 @@ export default function App() {
     for (let i = 0; i < itensIniciais.length; i++) {
       if (canceladoManualmenteRef.current) break;
 
+      const numAtual = itensIniciais[i].numero;
+      const sessionAtual = numAtual.replace(/\D/g, "");
+
       abortControllerRef.current = new AbortController();
 
       setFilaLote((prev) =>
@@ -417,12 +431,112 @@ export default function App() {
         )
       );
 
-      const resultado = await executarExtracaoProcesso(
-        itensIniciais[i].numero,
+      // Dispara a extração
+      const extrairPromise = executarExtracaoProcesso(
+        numAtual,
         abortControllerRef.current.signal
       );
 
+      // Se houver múltiplas instâncias no PJe, detecta e seleciona a primeira automaticamente
+      let opcoesDetectadas = null;
+      for (let t = 0; t < 8; t++) {
+        if (canceladoManualmenteRef.current) break;
+        await new Promise((r) => setTimeout(r, 600));
+
+        try {
+          const resOpcoes = await fetch(
+            `${API_BASE}/api/Captcha/opcoes-grau/${sessionAtual}`
+          );
+          if (resOpcoes.ok) {
+            const dataOpcoes = await resOpcoes.json();
+            const lista = dataOpcoes.opcoes || dataOpcoes.Opcoes;
+            if (Array.isArray(lista) && lista.length > 0) {
+              opcoesDetectadas = lista;
+              // Seleciona a primeira opção (grau 1/índice 0)
+              await fetch(
+                `${API_BASE}/api/Captcha/selecionar-grau/${sessionAtual}`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    indice: lista[0].indice ?? lista[0].Indice ?? 0,
+                  }),
+                }
+              );
+              break;
+            }
+          }
+        } catch {}
+      }
+
+      const resultado = await extrairPromise;
+
       if (canceladoManualmenteRef.current) break;
+
+      if (resultado.sucesso) {
+        // Salva a primeira instância obtida diretamente no banco
+        try {
+          await fetch(`${API_BASE}/api/Processos/salvar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(resultado.dados),
+          });
+          await carregarProcessosDoBanco();
+        } catch {}
+
+        // Se houver múltiplas instâncias (ex: 2º Grau também), extrai e salva sequencialmente
+        if (opcoesDetectadas && opcoesDetectadas.length > 1) {
+          for (let opIdx = 1; opIdx < opcoesDetectadas.length; opIdx++) {
+            if (canceladoManualmenteRef.current) break;
+            const extrairSegundaPromise = executarExtracaoProcesso(
+              numAtual,
+              abortControllerRef.current.signal
+            );
+
+            // Aguarda o painel abrir e clica na próxima instância
+            for (let t2 = 0; t2 < 10; t2++) {
+              await new Promise((r) => setTimeout(r, 600));
+              try {
+                const resOpcoes = await fetch(
+                  `${API_BASE}/api/Captcha/opcoes-grau/${sessionAtual}`
+                );
+                if (resOpcoes.ok) {
+                  const dataOpcoes = await resOpcoes.json();
+                  const lista = dataOpcoes.opcoes || dataOpcoes.Opcoes;
+                  if (Array.isArray(lista) && lista.length > 0) {
+                    await fetch(
+                      `${API_BASE}/api/Captcha/selecionar-grau/${sessionAtual}`,
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          indice:
+                            opcoesDetectadas[opIdx].indice ??
+                            opcoesDetectadas[opIdx].Indice ??
+                            opIdx,
+                        }),
+                      }
+                    );
+                    break;
+                  }
+                }
+              } catch {}
+            }
+
+            const resSegunda = await extrairSegundaPromise;
+            if (resSegunda.sucesso) {
+              try {
+                await fetch(`${API_BASE}/api/Processos/salvar`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(resSegunda.dados),
+                });
+                await carregarProcessosDoBanco();
+              } catch {}
+            }
+          }
+        }
+      }
 
       setFilaLote((prev) =>
         prev.map((item, idx) => {
@@ -480,35 +594,60 @@ export default function App() {
   };
 
   // avalia se o processo não existe no banco OU se possui dados diferentes
-  const temAlteracaoParaSalvar = useMemo(() => {
-    if (!resultadoAtual) return false;
+  const checarSeTemAlteracao = (resultado) => {
+    if (!resultado) return false;
 
     const noBanco = processosSalvos.find(
       (p) =>
-        p.numeroProcesso === resultadoAtual.numeroProcesso &&
-        p.tribunal === resultadoAtual.tribunal &&
-        (p.grau || 1) === (resultadoAtual.grau || 1)
+        p.numeroProcesso.replace(/\D/g, "") ===
+          resultado.numeroProcesso.replace(/\D/g, "") &&
+        p.tribunal.trim().toUpperCase() ===
+          resultado.tribunal.trim().toUpperCase() &&
+        (p.grau || 1) === (resultado.grau || 1)
     );
 
     if (!noBanco) return true;
 
-    const dataBanco = noBanco.dataUltimoAndamento
-      ? new Date(noBanco.dataUltimoAndamento).getTime()
-      : null;
-    const dataAtual = resultadoAtual.dataUltimoAndamento
-      ? new Date(resultadoAtual.dataUltimoAndamento).getTime()
-      : null;
+    const normalizar = (txt) => (txt || "").trim().toLowerCase();
 
     const mudouAndamento =
-      (noBanco.ultimoAndamento || "").trim() !==
-      (resultadoAtual.ultimoAndamento || "").trim();
-    const mudouData = dataBanco !== dataAtual;
+      normalizar(noBanco.ultimoAndamento) !==
+      normalizar(resultado.ultimoAndamento);
     const mudouClasse =
-      (noBanco.classe || "") !== (resultadoAtual.classe || "");
-    const mudouForo = (noBanco.foro || "") !== (resultadoAtual.foro || "");
+      normalizar(noBanco.classe) !== normalizar(resultado.classe);
+    const mudouForo = normalizar(noBanco.foro) !== normalizar(resultado.foro);
+    const mudouAssunto =
+      normalizar(noBanco.assunto) !== normalizar(resultado.assunto);
 
-    return mudouAndamento || mudouData || mudouClasse || mudouForo;
-  }, [resultadoAtual, processosSalvos]);
+    const formatarData = (d) =>
+      d ? new Date(d).toISOString().slice(0, 10) : "";
+    const mudouDataAndamento =
+      formatarData(noBanco.dataUltimoAndamento) !==
+      formatarData(resultado.dataUltimoAndamento);
+
+    const qtdPartesBanco = noBanco.partes?.length || 0;
+    const qtdPartesAtual = resultado.partes?.length || 0;
+    const mudouPartes = qtdPartesBanco !== qtdPartesAtual;
+
+    return (
+      mudouAndamento ||
+      mudouDataAndamento ||
+      mudouClasse ||
+      mudouForo ||
+      mudouAssunto ||
+      mudouPartes
+    );
+  };
+
+  const temAlteracaoParaSalvarIndividual = useMemo(
+    () => checarSeTemAlteracao(resultadoIndividual),
+    [resultadoIndividual, processosSalvos]
+  );
+
+  const temAlteracaoParaSalvarLote = useMemo(
+    () => checarSeTemAlteracao(resultadoLote),
+    [resultadoLote, processosSalvos]
+  );
 
   // filtro de Processos Salvos pela Search Box
   const processosSalvosFiltrados = useMemo(() => {
@@ -537,6 +676,296 @@ export default function App() {
   ).length;
   const porcentagemLote =
     totalLote > 0 ? Math.round((concluidosLote / totalLote) * 100) : 0;
+
+  // Renderizador reutilizável de painel de detalhes do processo
+  const renderCardDetalhes = (dados, temAlteracao, onFechar) => {
+    if (!dados) return null;
+    const grauInt = dados.grau || 1;
+
+    return (
+      <div
+        style={{
+          background: "rgba(17, 24, 39, 0.85)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          borderRadius: 12,
+          padding: 24,
+          marginBottom: 24,
+          boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5)",
+          textAlign: "left",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+            paddingBottom: 14,
+            marginBottom: 18,
+          }}
+        >
+          <div style={{ textAlign: "left" }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: "bold",
+                textTransform: "uppercase",
+                letterSpacing: 1,
+                color: "#94a3b8",
+                display: "block",
+                textAlign: "left",
+              }}
+            >
+              Processo Identificado
+            </span>
+            <h2
+              style={{
+                margin: "4px 0 0 0",
+                fontSize: 22,
+                color: "#f8fafc",
+                fontFamily: "monospace",
+                textAlign: "left",
+              }}
+            >
+              {dados.numeroProcesso}
+            </h2>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span
+              style={{
+                background: "#1e3a8a",
+                color: "#93c5fd",
+                padding: "6px 14px",
+                borderRadius: 20,
+                fontSize: 12,
+                fontWeight: "bold",
+                border: "1px solid rgba(147, 197, 253, 0.3)",
+              }}
+            >
+              {dados.tribunal}
+            </span>
+
+            <span
+              style={{
+                background:
+                  grauInt === 2
+                    ? "rgba(168, 85, 247, 0.2)"
+                    : "rgba(59, 130, 246, 0.2)",
+                color: grauInt === 2 ? "#d8b4fe" : "#93c5fd",
+                padding: "6px 12px",
+                borderRadius: 20,
+                fontSize: 12,
+                fontWeight: "bold",
+                border:
+                  grauInt === 2
+                    ? "1px solid rgba(168, 85, 247, 0.4)"
+                    : "1px solid rgba(59, 130, 246, 0.4)",
+              }}
+            >
+              {grauInt}º Grau
+            </span>
+
+            {temAlteracao ? (
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(
+                      `${API_BASE}/api/Processos/salvar`,
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(dados),
+                      }
+                    );
+                    if (res.ok) {
+                      await carregarProcessosDoBanco();
+                      alert("Processo salvo com sucesso!");
+                    } else {
+                      alert("Erro ao salvar processo no banco.");
+                    }
+                  } catch {
+                    alert("Erro de conexão ao salvar processo.");
+                  }
+                }}
+                title="Salvar no Banco de Dados"
+                style={{
+                  background: "#1e293b",
+                  border: "1px solid #475569",
+                  color: "#4ade80",
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                  fontSize: 14,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                💾 Salvar
+              </button>
+            ) : (
+              <span
+                style={{
+                  fontSize: 12,
+                  color: "#94a3b8",
+                  background: "#1e293b",
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #334155",
+                }}
+              >
+                ✓ Sincronizado
+              </span>
+            )}
+
+            <button
+              onClick={onFechar}
+              title="Fechar detalhes"
+              style={{
+                background: "rgba(220, 38, 38, 0.15)",
+                border: "1px solid rgba(239, 68, 68, 0.4)",
+                color: "#f87171",
+                padding: "6px 12px",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontWeight: "bold",
+                fontSize: 14,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+            marginBottom: 20,
+          }}
+        >
+          <div>
+            <span style={{ fontSize: 12, color: "#94a3b8", display: "block" }}>
+              Data de Distribuição
+            </span>
+            <strong>
+              {dados.dataDistribuicao
+                ? new Date(dados.dataDistribuicao).toLocaleDateString("pt-BR")
+                : "Não identificada"}
+            </strong>
+          </div>
+          <div>
+            <span style={{ fontSize: 12, color: "#94a3b8", display: "block" }}>
+              Foro / Órgão Julgador
+            </span>
+            <strong>{dados.foro || "Não informado"}</strong>
+          </div>
+          <div>
+            <span style={{ fontSize: 12, color: "#94a3b8", display: "block" }}>
+              Classe Judicial
+            </span>
+            <strong>{dados.classe || "Não informada"}</strong>
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <span style={{ fontSize: 12, color: "#94a3b8", display: "block" }}>
+              Assunto
+            </span>
+            <strong>{dados.assunto || "Não informado"}</strong>
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginBottom: 18,
+            padding: 16,
+            background: "#1e293b",
+            borderRadius: 8,
+            border: "1px solid #334155",
+          }}
+        >
+          <h4 style={{ margin: "0 0 10px 0", fontSize: 14, color: "#cbd5e1" }}>
+            Partes do Processo ({dados.partes?.length || 0})
+          </h4>
+          {dados.partes && dados.partes.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {dados.partes.map((parte, i) => (
+                <div key={i} style={{ fontSize: 13, display: "flex", gap: 8 }}>
+                  <span
+                    style={{
+                      fontWeight: 600,
+                      color: "#94a3b8",
+                      minWidth: 120,
+                    }}
+                  >
+                    {parte.tipo || parte.papel || "Parte"}:
+                  </span>
+                  <span style={{ color: "#f1f5f9" }}>{parte.nome}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
+              Não há partes listadas publicamente.
+            </p>
+          )}
+        </div>
+
+        <div
+          style={{
+            padding: 16,
+            background: "#1e293b",
+            border: "1px solid #334155",
+            borderRadius: 8,
+          }}
+        >
+          <h4
+            style={{
+              margin: "0 0 10px 0",
+              fontSize: 14,
+              color: "#cbd5e1",
+              textAlign: "left",
+            }}
+          >
+            Última Movimentação Registrada
+          </h4>
+
+          <div
+            style={{
+              fontSize: 13,
+              display: "flex",
+              gap: 8,
+              alignItems: "baseline",
+            }}
+          >
+            <span
+              style={{
+                color: "#94a3b8",
+                minWidth: 120,
+              }}
+            >
+              {dados.dataUltimoAndamento
+                ? new Date(dados.dataUltimoAndamento).toLocaleString("pt-BR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                  })
+                : "Data não identificada"}
+            </span>
+            <span style={{ color: "#e2e8f0", lineHeight: 1.5 }}>
+              {dados.ultimoAndamento ||
+                "Sem movimentações adicionais registradas."}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -980,7 +1409,7 @@ export default function App() {
                       setNumeroInput(p.numero);
                       setProcessoAtualEmExecucao(p.numero);
                       setCarregandoIndividual(true);
-                      setResultadoAtual(null);
+                      setResultadoIndividual(null);
                       setErro(null);
                       setResolvendoCaptchaIndividual(false);
                       canceladoManualmenteRef.current = false;
@@ -990,7 +1419,7 @@ export default function App() {
                         abortControllerRef.current.signal
                       ).then((res) => {
                         if (res.sucesso) {
-                          setResultadoAtual(res.dados);
+                          setResultadoIndividual(res.dados);
                         } else if (!canceladoManualmenteRef.current) {
                           setErro(res.erro);
                         }
@@ -1025,6 +1454,15 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* Card de Detalhe da Aba Individual */}
+        {modoAba === "individual" &&
+          resultadoIndividual &&
+          renderCardDetalhes(
+            resultadoIndividual,
+            temAlteracaoParaSalvarIndividual,
+            () => setResultadoIndividual(null)
+          )}
 
         {modoAba === "lote" && (
           <div
@@ -1283,65 +1721,18 @@ export default function App() {
                         )}
                         {item.status === "sucesso" && (
                           <>
-                            {temAlteracaoParaSalvar ? (
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    const res = await fetch(
-                                      `${API_BASE}/api/Processos/salvar`,
-                                      {
-                                        method: "POST",
-                                        headers: {
-                                          "Content-Type": "application/json",
-                                        },
-                                        body: JSON.stringify(resultadoAtual),
-                                      }
-                                    );
-                                    if (res.ok) {
-                                      await carregarProcessosDoBanco();
-                                      alert("Processo salvo com sucesso!");
-                                    } else {
-                                      alert(
-                                        "Erro ao salvar processo no banco."
-                                      );
-                                    }
-                                  } catch {
-                                    alert(
-                                      "Erro de conexão ao salvar processo."
-                                    );
-                                  }
-                                }}
-                                title="Salvar no Banco de Dados"
-                                style={{
-                                  background: "#1e293b",
-                                  border: "1px solid #475569",
-                                  color: "#4ade80",
-                                  padding: "6px 12px",
-                                  borderRadius: 8,
-                                  cursor: "pointer",
-                                  fontWeight: "bold",
-                                  fontSize: 14,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 6,
-                                }}
-                              >
-                                💾
-                              </button>
-                            ) : (
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  color: "#94a3b8",
-                                  background: "#1e293b",
-                                  padding: "6px 12px",
-                                  borderRadius: 8,
-                                  border: "1px solid #334155",
-                                }}
-                              >
-                                ✓ Sincronizado
-                              </span>
-                            )}
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: "#4ade80",
+                                background: "rgba(34, 197, 94, 0.15)",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                border: "1px solid rgba(34, 197, 94, 0.3)",
+                              }}
+                            >
+                              💾 Salvo no Banco
+                            </span>
                             <span
                               style={{ color: "#4ade80", fontWeight: "bold" }}
                             >
@@ -1349,8 +1740,7 @@ export default function App() {
                             </span>
                             <button
                               onClick={() => {
-                                setResultadoAtual(item.dados);
-                                setModoAba("individual");
+                                setResultadoLote(item.dados);
                                 window.scrollTo({
                                   top: 120,
                                   behavior: "smooth",
@@ -1385,6 +1775,13 @@ export default function App() {
             )}
           </div>
         )}
+
+        {/* Card de Detalhe Exclusivo da Aba de Lote */}
+        {modoAba === "lote" &&
+          resultadoLote &&
+          renderCardDetalhes(resultadoLote, temAlteracaoParaSalvarLote, () =>
+            setResultadoLote(null)
+          )}
 
         {/* Modal de Instâncias Múltiplas */}
         {opcoesGrau.length > 0 && (
@@ -1451,312 +1848,6 @@ export default function App() {
                   {opcao.texto ?? opcao.Texto}
                 </button>
               ))}
-            </div>
-          </div>
-        )}
-
-        {/* Card de Detalhe com Botão Salvar Condicional */}
-        {modoAba === "individual" && resultadoAtual && (
-          <div
-            style={{
-              background: "rgba(17, 24, 39, 0.85)",
-              backdropFilter: "blur(12px)",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
-              borderRadius: 12,
-              padding: 24,
-              marginBottom: 24,
-              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5)",
-              textAlign: "left",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                paddingBottom: 14,
-                marginBottom: 18,
-              }}
-            >
-              <div style={{ textAlign: "left" }}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: "bold",
-                    textTransform: "uppercase",
-                    letterSpacing: 1,
-                    color: "#94a3b8",
-                    display: "block",
-                    textAlign: "left",
-                  }}
-                >
-                  Processo Identificado
-                </span>
-                <h2
-                  style={{
-                    margin: "4px 0 0 0",
-                    fontSize: 22,
-                    color: "#f8fafc",
-                    fontFamily: "monospace",
-                    textAlign: "left",
-                  }}
-                >
-                  {resultadoAtual.numeroProcesso}
-                </h2>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span
-                  style={{
-                    background: "#1e3a8a",
-                    color: "#93c5fd",
-                    padding: "6px 14px",
-                    borderRadius: 20,
-                    fontSize: 12,
-                    fontWeight: "bold",
-                    border: "1px solid rgba(147, 197, 253, 0.3)",
-                  }}
-                >
-                  {resultadoAtual.tribunal}
-                </span>
-
-                <span
-                  style={{
-                    background:
-                      (resultadoAtual.grau || 1) === 2
-                        ? "rgba(168, 85, 247, 0.2)"
-                        : "rgba(59, 130, 246, 0.2)",
-                    color:
-                      (resultadoAtual.grau || 1) === 2 ? "#d8b4fe" : "#93c5fd",
-                    padding: "6px 12px",
-                    borderRadius: 20,
-                    fontSize: 12,
-                    fontWeight: "bold",
-                    border:
-                      (resultadoAtual.grau || 1) === 2
-                        ? "1px solid rgba(168, 85, 247, 0.4)"
-                        : "1px solid rgba(59, 130, 246, 0.4)",
-                  }}
-                >
-                  {resultadoAtual.grau || 1}º Grau
-                </span>
-
-                {/* SÓ MOSTRA O BOTÃO SALVAR SE HOUVER ALTERAÇÃO OU SE FOR NOVO */}
-                {temAlteracaoParaSalvar ? (
-                  <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(
-                          `${API_BASE}/api/Processos/salvar`,
-                          {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify(resultadoAtual),
-                          }
-                        );
-                        if (res.ok) {
-                          await carregarProcessosDoBanco();
-                          alert("Processo salvo com sucesso!");
-                        } else {
-                          alert("Erro ao salvar processo no banco.");
-                        }
-                      } catch {
-                        alert("Erro de conexão ao salvar processo.");
-                      }
-                    }}
-                    title="Salvar no Banco de Dados"
-                    style={{
-                      background: "#1e293b",
-                      border: "1px solid #475569",
-                      color: "#4ade80",
-                      padding: "6px 12px",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                      fontSize: 14,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    💾 Salvar
-                  </button>
-                ) : (
-                  <span
-                    style={{
-                      fontSize: 12,
-                      color: "#94a3b8",
-                      background: "#1e293b",
-                      padding: "6px 12px",
-                      borderRadius: 8,
-                      border: "1px solid #334155",
-                    }}
-                  >
-                    ✓ Sincronizado
-                  </span>
-                )}
-
-                <button
-                  onClick={() => setResultadoAtual(null)}
-                  title="Fechar detalhes"
-                  style={{
-                    background: "rgba(220, 38, 38, 0.15)",
-                    border: "1px solid rgba(239, 68, 68, 0.4)",
-                    color: "#f87171",
-                    padding: "6px 12px",
-                    borderRadius: 8,
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                    fontSize: 14,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 16,
-                marginBottom: 20,
-              }}
-            >
-              <div>
-                <span
-                  style={{ fontSize: 12, color: "#94a3b8", display: "block" }}
-                >
-                  Data de Distribuição
-                </span>
-                <strong>
-                  {resultadoAtual.dataDistribuicao
-                    ? new Date(
-                        resultadoAtual.dataDistribuicao
-                      ).toLocaleDateString("pt-BR")
-                    : "Não identificada"}
-                </strong>
-              </div>
-              <div>
-                <span
-                  style={{ fontSize: 12, color: "#94a3b8", display: "block" }}
-                >
-                  Foro / Órgão Julgador
-                </span>
-                <strong>{resultadoAtual.foro || "Não informado"}</strong>
-              </div>
-              <div>
-                <span
-                  style={{ fontSize: 12, color: "#94a3b8", display: "block" }}
-                >
-                  Classe Judicial
-                </span>
-                <strong>{resultadoAtual.classe || "Não informada"}</strong>
-              </div>
-              <div style={{ gridColumn: "1 / -1" }}>
-                <span
-                  style={{ fontSize: 12, color: "#94a3b8", display: "block" }}
-                >
-                  Assunto
-                </span>
-                <strong>{resultadoAtual.assunto || "Não informado"}</strong>
-              </div>
-            </div>
-
-            <div
-              style={{
-                marginBottom: 18,
-                padding: 16,
-                background: "#1e293b",
-                borderRadius: 8,
-                border: "1px solid #334155",
-              }}
-            >
-              <h4
-                style={{ margin: "0 0 10px 0", fontSize: 14, color: "#cbd5e1" }}
-              >
-                Partes do Processo ({resultadoAtual.partes?.length || 0})
-              </h4>
-              {resultadoAtual.partes && resultadoAtual.partes.length > 0 ? (
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                >
-                  {resultadoAtual.partes.map((parte, i) => (
-                    <div
-                      key={i}
-                      style={{ fontSize: 13, display: "flex", gap: 8 }}
-                    >
-                      <span
-                        style={{
-                          fontWeight: 600,
-                          color: "#94a3b8",
-                          minWidth: 120,
-                        }}
-                      >
-                        {parte.tipo || parte.papel || "Parte"}:
-                      </span>
-                      <span style={{ color: "#f1f5f9" }}>{parte.nome}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
-                  Não há partes listadas publicamente.
-                </p>
-              )}
-            </div>
-
-            <div
-              style={{
-                padding: 16,
-                background: "#1e293b",
-                border: "1px solid #334155",
-                borderRadius: 8,
-              }}
-            >
-              <h4
-                style={{
-                  margin: "0 0 10px 0",
-                  fontSize: 14,
-                  color: "#cbd5e1",
-                  textAlign: "left",
-                }}
-              >
-                Última Movimentação Registrada
-              </h4>
-
-              <div
-                style={{
-                  fontSize: 13,
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "baseline",
-                }}
-              >
-                <span
-                  style={{
-                    color: "#94a3b8",
-                    minWidth: 120,
-                  }}
-                >
-                  {resultadoAtual.dataUltimoAndamento
-                    ? new Date(
-                        resultadoAtual.dataUltimoAndamento
-                      ).toLocaleString("pt-BR", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                      })
-                    : "Data não identificada"}
-                </span>
-                <span style={{ color: "#e2e8f0", lineHeight: 1.5 }}>
-                  {resultadoAtual.ultimoAndamento ||
-                    "Sem movimentações adicionais registradas."}
-                </span>
-              </div>
             </div>
           </div>
         )}
@@ -1908,8 +1999,11 @@ export default function App() {
                         >
                           <button
                             onClick={() => {
-                              setResultadoAtual(proc);
-                              setModoAba("individual");
+                              if (modoAba === "lote") {
+                                setResultadoLote(proc);
+                              } else {
+                                setResultadoIndividual(proc);
+                              }
                               window.scrollTo({ top: 120, behavior: "smooth" });
                             }}
                             style={{
