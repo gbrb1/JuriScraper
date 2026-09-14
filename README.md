@@ -6,7 +6,7 @@ O **JuriScraper** é uma aplicação completa para consulta automatizada de proc
 
 O sistema permite consultas individuais e em lote, pesquisa em registros locais, persistência condicional inteligente (apenas quando novos dados são detectados) e sincronização independente de instâncias (1º e 2º Grau).
 
-> 🤝**Agradecimento**
+> ❤️**Agradecimento**
 >
 > Meu agradecimento especial aos desenvolvedores e contribuidores do **decryptr/captcha** pelo trabalho dedicado à pesquisa e implementação de reconhecimento automatizado de CAPTCHAs, e por disponibilizarem esse trabalho à comunidade.
 > O projeto original disponibiliza diferentes modelos treinados para CAPTCHAs de sistemas como **TRT, TJMG, TJPE, TJRS, ESAJ, Receita Federal**, entre outros.<br />
@@ -72,12 +72,6 @@ docker compose up --build -d
 1. Acesse http://localhost:3000.
 2. No campo de busca superior, insira o número CNJ completo (ex: 0010263-82.2026.5.15.0052).
 3. Clique em **Consultar**.
-
-
-### 💾 Salvamento Condicional Inteligente
-Após o scrape, os dados extraídos são confrontados com os registros salvos:
-* **Se o processo não existir no banco** ou **se houver novas movimentações/alterações cadastrais**: O botão "💾 Salvar" fica disponível para inclusão/atualização.
-* **Se os dados extraídos forem idênticos aos do banco**: A interface exibe a tag "✓ Sincronizado" e dispensa gravação redundante.
 
 ---
 
