@@ -13,7 +13,7 @@ O sistema permite consultas individuais e em lote, pesquisa em registros locais,
 >Confira o trabalho em:
 > https://github.com/decryptr/captcha
 ><br />
->O modelo utilizado originalmente pelo projeto foi desenvolvido com R + Torch/Luz e disponibilizado no formato .pt. <br />Para permitir sua execução diretamente na aplicação .NET, o modelo foi convertido para ONNX, mantendo a mesma arquitetura e os mesmos pesos da versão original.
+>O modelo utilizado originalmente pelo projeto foi desenvolvido com R + Torch/Luz e disponibilizado no formato .pt. Para permitir sua execução diretamente na aplicação .NET, o modelo foi convertido para ONNX, mantendo a mesma arquitetura e os mesmos pesos da versão original.
 ---
 
 # 📖 Guia de Uso
