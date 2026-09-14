@@ -215,3 +215,9 @@ JuriScraper
 * Foro / Comarca / Órgão Julgador
 * Polos e Partes Envolvidas (Autor, Réu, Advogados)
 * Data e descrição do último andamento processual
+
+# ⚠️ Observações
+
+>A disponibilidade das informações depende dos próprios portais dos tribunais.
+>
+>Processos em segredo de justiça, números inválidos, indisponibilidade temporária do tribunal ou mecanismos de segurança podem impedir a obtenção de determinados dados.
